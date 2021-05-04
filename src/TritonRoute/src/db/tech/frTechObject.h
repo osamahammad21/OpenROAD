@@ -38,6 +38,7 @@
 #include "db/tech/frLayer.h"
 #include "db/tech/frViaRuleGenerate.h"
 #include "frBaseTypes.h"
+#include "opendb/db.h"
 #include "utl/Logger.h"
 namespace fr {
 namespace io {
@@ -47,10 +48,16 @@ class frTechObject
 {
  public:
   // constructors
-  frTechObject() : dbUnit(0), manufacturingGrid(0) {}
+  frTechObject() : dbTech(nullptr) {}
   // getters
-  frUInt4 getDBUPerUU() const { return dbUnit; }
-  frUInt4 getManufacturingGrid() const { return manufacturingGrid; }
+  frUInt4 getDBUPerUU() const
+  {
+    return dbTech == nullptr ? 0 : dbTech->getDbUnitsPerMicron();
+  }
+  frUInt4 getManufacturingGrid() const
+  {
+    return dbTech == nullptr ? 0 : dbTech->getManufacturingGrid();
+  }
   frLayer* getLayer(const frString& name) const
   {
     if (name2layer.find(name) == name2layer.end()) {
@@ -103,8 +110,10 @@ class frTechObject
   }
 
   // setters
-  void setDBUPerUU(frUInt4 uIn) { dbUnit = uIn; }
-  void setManufacturingGrid(frUInt4 in) { manufacturingGrid = in; }
+  void setDbTech(odb::dbTech* tech)
+  {
+    dbTech = tech;
+  }
   void addLayer(std::unique_ptr<frLayer> in)
   {
     name2layer[in->getName()] = in.get();
@@ -269,8 +278,7 @@ class frTechObject
   friend class io::Parser;
 
  protected:
-  frUInt4 dbUnit;
-  frUInt4 manufacturingGrid;
+  odb::dbTech* dbTech;
 
   std::map<frString, frLayer*> name2layer;
   std::vector<std::unique_ptr<frLayer>> layers;
