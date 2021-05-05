@@ -130,6 +130,8 @@ using std::string;
 
 class dbVerilogNetwork;
 
+class designBrowserKernel;
+
 // Only pointers to components so the header has no dependents.
 class OpenRoad
 {
@@ -192,6 +194,24 @@ public:
 		    bool include_pwr_gnd,
 		    std::vector<sta::LibertyCell*> *remove_cells);
   void linkDesign(const char *top_cell_name);
+  
+  //***********************************
+  //**** Design Browser
+  //***********************************
+  void linkDesignBrowser();
+ 
+  void designBrowser(const char *name, const char *file_name, int level);
+ 
+  void reportLogicArea(const char *name, const char *file_name, bool detailed, const char *key);
+ 
+  void reportLogicNet(const char *name, const char *file_name);
+ 
+  void reportLogicConnection(const char *name, const char *file_name);
+ 
+  void reportMacro(const char *name, const char *file_name);
+
+  void reportDesignFile(const char *file_name);
+  //**********************************
 
   void readDb(const char *filename);
   void writeDb(const char *filename);
@@ -236,6 +256,7 @@ private:
   dbVerilogNetwork *verilog_network_;
   sta::dbSta *sta_;
   rsz::Resizer *resizer_;
+  designBrowserKernel *browser_;
   ppl::IOPlacer *ioPlacer_;
   dpl::Opendp *opendp_;
   fin::Finale *finale_;

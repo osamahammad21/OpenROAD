@@ -60,6 +60,7 @@
 
 #include "db_sta/dbReadVerilog.hh"
 #include "db_sta/dbNetwork.hh"
+#include "designBrowser/designBrowser.hh"
 
 #include "ord/InitOpenRoad.hh"
 #include "sst/flute.h"
@@ -122,6 +123,7 @@ OpenRoad::OpenRoad()
     verilog_network_(nullptr),
     sta_(nullptr),
     resizer_(nullptr),
+    browser_(nullptr),
     ioPlacer_(nullptr),
     opendp_(nullptr),
     finale_(nullptr),
@@ -147,6 +149,7 @@ OpenRoad::~OpenRoad()
   deleteDbSta(sta_);
   deleteIoplacer(ioPlacer_);
   deleteResizer(resizer_);
+  deleteDesignBrowser(browser_);
   deleteOpendp(opendp_);
   deleteFastRoute(fastRoute_);
   deleteTritonCts(tritonCts_);
@@ -206,6 +209,7 @@ OpenRoad::init(Tcl_Interp *tcl_interp)
   verilog_network_ = makeDbVerilogNetwork();
   ioPlacer_ = makeIoplacer();
   resizer_ = makeResizer();
+  browser_ = makeDesignBrowser();
   opendp_ = makeOpendp();
   finale_ = makeFinale();
   fastRoute_ = makeFastRoute();
@@ -413,6 +417,47 @@ OpenRoad::writeVerilog(const char *filename,
   sta::writeVerilog(filename, sort, include_pwr_gnd,
 		    remove_cells, sta_->network());
 }
+//
+//*************************************
+//******** Design Browser
+//*************************************
+
+ void OpenRoad::designBrowser(const char *name, const char *file_name, int level)
+ {
+     dbDesignBrowser(browser_, name, file_name, level);
+ }
+
+
+ void OpenRoad::reportLogicArea(const char *name, const char *file_name, bool detailed, const char *key)
+ {
+     dbReportLogicArea(browser_, name, file_name, detailed, key);
+ }
+
+ void OpenRoad::reportLogicNet(const char *name, const char *file_name)
+ {
+     dbReportLogicNet(browser_, name, file_name);
+ }
+
+ void OpenRoad::reportLogicConnection(const char *name, const char *file_name)
+ {
+     dbReportLogicConnection(browser_, name, file_name);
+ }
+
+ void OpenRoad::reportMacro(const char *name, const char *file_name)
+ {
+     dbReportMacro(browser_, name, file_name);
+ }
+
+ void OpenRoad::reportDesignFile(const char *file_name)
+ {
+     dbReportDesignFile(browser_, file_name);
+ }
+
+ void OpenRoad::linkDesignBrowser()
+ {
+     dbLinkDesignBrowser(browser_, verilog_network_, db_);
+ }
+
 
 bool
 OpenRoad::unitsInitialized()

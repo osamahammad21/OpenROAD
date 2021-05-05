@@ -58,6 +58,9 @@ proc link_design { {top_cell_name ""} } {
     utl::error ORD 1010 "no technology has been read."
   }
   ord::link_design_db_cmd $top_cell_name
+  #Call link_design_browser to create the designBrowser hierarchy
+  ord::link_design_browser_cmd
+
 }
 
 sta::define_cmd_args "write_verilog" {[-sort] [-include_pwr_gnd]\

@@ -20,6 +20,7 @@ include("openroad")
 set(OPENSTA_HOME ${PROJECT_SOURCE_DIR}/src/sta)
 set(OPENDB_HOME ${PROJECT_SOURCE_DIR}/src/OpenDB)
 set(DBSTA_HOME ${PROJECT_SOURCE_DIR}/src/dbSta)
+set(DESIGNBROWSER_HOME ${PROJECT_SOURCE_DIR}/src/designBrowser)
 set(RESIZER_HOME ${PROJECT_SOURCE_DIR}/src/rsz)
 set(ICEWALL_HOME ${OPENROAD_HOME}/src/ICeWall)
 
@@ -117,6 +118,7 @@ add_subdirectory(ifp)
 add_subdirectory(OpenDB)
 add_subdirectory(sta)
 add_subdirectory(dbSta)
+add_subdirectory(designBrowser)
 add_subdirectory(rsz)
 add_subdirectory(sst)
 add_subdirectory(replace)
@@ -170,6 +172,7 @@ target_link_libraries(openroad
   sst
   dbSta
   OpenSTA
+  designBrowser
   opendb
   opendbtcl
   rcx

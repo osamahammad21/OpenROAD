@@ -98,6 +98,7 @@ ensureLinked()
     throw CmdErrorNetworkNotLinked();
 }
 
+
 dbNetwork *
 getDbNetwork()
 {
@@ -248,6 +249,55 @@ openroad_git_sha1()
 {
   return OPENROAD_GIT_SHA1;
 }
+
+//************************************
+//******** Design Browser
+//*************************************
+
+void design_browser_cmd(const char *name, const char *file_name, int level)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->designBrowser(name, file_name, level);
+}
+ 
+ 
+void report_logic_area_cmd(const char *name, const char *file_name, bool detailed, const char *key)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->reportLogicArea(name, file_name, detailed, key);
+}
+ 
+void report_logic_net_cmd(const char *name, const char *file_name)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->reportLogicNet(name, file_name);
+}
+ 
+void report_logic_connection_cmd(const char *name, const char *file_name)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->reportLogicConnection(name, file_name);
+}
+ 
+void report_macro_cmd(const char *name, const char *file_name)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->reportMacro(name, file_name);
+}
+ 
+void report_design_file_cmd(const char *file_name)
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->reportDesignFile(file_name);
+}
+
+void link_design_browser_cmd()
+{
+    OpenRoad *ord = getOpenRoad();
+    ord->linkDesignBrowser();
+}
+
+//////////////////////////////
 
 void
 read_lef_cmd(const char *filename,

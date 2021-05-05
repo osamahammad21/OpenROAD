@@ -140,6 +140,108 @@ proc write_db { args } {
   ord::write_db_cmd $filename
 }
 
+
+# ************************************
+# *** Design Browser
+# ************************************
+ 
+sta::define_cmd_args "report_logical_hierarchy" {[-module module] \
+                                      [-level level] \
+                                      [-rpt_file rpt_file] }
+proc report_logical_hierarchy { args } {
+    sta::parse_key_args "report_logical_hierarchy" args keys {-module -level -rpt_file} flags { }
+    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
+        set module $keys(-module)
+        set rpt_file $keys(-rpt_file)
+        if { [info exists keys(-level)] } {
+            set level $keys(-level)
+            ord::design_browser_cmd $module $rpt_file $level
+        } else {
+            ord::design_browser_cmd $module $rpt_file 100000
+        }
+    } else {
+        ord::error "report_logical_hierarchy -module module_name -rpt_file hier.rpt -level level"
+    }
+}
+ 
+ 
+sta::define_cmd_args "report_area" {[-module module] \
+                                    [-details] \
+				    [-key key]
+                                    [-rpt_file rpt_file] }
+proc report_area { args } {
+    sta::parse_key_args "report_area" args keys {-module -key -rpt_file} flags { -details }
+    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
+        set module $keys(-module)
+        set rpt_file $keys(-rpt_file)
+        if { [info exists flags(-details)] } {
+            set key "term_count"
+            if { [info exists keys(-key)] } {
+                set key $keys(-key)
+            }    
+            ord::report_logic_area_cmd $module $rpt_file true $key
+        } else {
+            ord::report_logic_area_cmd $module $rpt_file false "" 
+        }
+    } else {
+        ord::error "report_area -module module -rpt_file rpt_file -details -key term_count/cell_count"
+    }
+}
+
+
+sta::define_cmd_args "report_logical_net" {[-module module] \
+                                      [-rpt_file rpt_file] }
+proc report_logical_net { args } {
+    sta::parse_key_args "report_logical_net" args keys {-module -rpt_file} flags { }
+    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
+        set module $keys(-module)
+        set rpt_file $keys(-rpt_file)
+        ord::report_logic_net_cmd $module $rpt_file
+    } else {
+        ord::error "report_logical_net -module module -rpt_file rpt_file"
+    }
+}
+
+
+sta::define_cmd_args "report_logical_connection" {[-module module] \
+                                      [-rpt_file rpt_file] }
+proc report_logical_connection { args } {
+    sta::parse_key_args "report_logical_connection" args keys {-module -rpt_file} flags { }
+    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
+        set module $keys(-module)
+        set rpt_file $keys(-rpt_file)
+        ord::report_logic_connection_cmd $module $rpt_file
+    } else {
+        ord::error "report_logical_connection -module module -rpt_file rpt_file"
+    }
+}
+
+sta::define_cmd_args "report_macro" {[-module module] \
+                                      [-rpt_file rpt_file] }
+proc report_macro { args } {
+    sta::parse_key_args "report_macro" args keys {-module -rpt_file} flags { }
+    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
+        set module $keys(-module)
+        set rpt_file $keys(-rpt_file)
+        ord::report_macro_cmd  $module $rpt_file
+    } else {
+        ord::error "report_macro -module module -rpt_file rpt_file"
+    }
+}
+
+sta::define_cmd_args "report_design_file" {[-logical_hierarchy file_name]}
+proc report_design_file { args } {
+    sta::parse_key_args "report_design_file" args keys {-logical_hierarchy } flags { }
+    if { [info exists keys(-logical_hierarchy)] } {
+        set file_name $keys(-logical_hierarchy)
+        ord::report_design_file_cmd $file_name
+    } else {
+        ord::error "report_design_file -logical_hierarchy file_name"
+    }
+}
+
+
+
 sta::define_cmd_args "assign_ndr" { -ndr name (-net name | -all_clocks) }
 
 proc assign_ndr { args } {
