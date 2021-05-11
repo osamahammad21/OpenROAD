@@ -4,6 +4,7 @@
 #include "opendb/db.h"
 #include "sta/PortDirection.hh"
 #include "sta/Liberty.hh"
+#include <iostream>
  
 #include <map>
 #include <string>
@@ -632,20 +633,31 @@ namespace ord {
             current_module.addNet(net);
         }
 
-
+        std::cout<<"current module: "<<_network->name(inst)<<std::endl;
         InstanceChildIterator *child_iter = _network->childIterator(inst);
         while(child_iter->hasNext())
         {
             Instance *child = child_iter->next();
             if(_network->isHierarchical(child)) {
+                std::cout<<"Heirarchal Child (submodule)"<<std::endl;
+                std::cout<<"verilogname (modinst name): "<< _network->name(child)<<std::endl;
+                sta::Cell *cell = _network->cell(child);
+                std::cout<<"name (module name): "<<_network->name(cell)<<std::endl;
+                int i;
+                // std::cin>>i;
                 current_module.addSubmodule(child);
                 _module_queue.push(child);
             } else {
                 Cell *cell = _network->cell(child);
                 const char *child_name = _network->name(cell);
                 dbMaster *master = _db->findMaster(child_name);
+                std::cout<<"instname"<< _network->name(child)<<std::endl;
+                std::cout<<"mastername"<<_network->name(cell)<<std::endl;
 
                 if(master->isBlock()) {
+                    int i;
+                    std::cout<<"block master: "<<master->getName()<<std::endl;
+                    std::cin>>i;
                     current_module.addMacro(child);
                 } else {
                     current_module.addStdCell(child);
