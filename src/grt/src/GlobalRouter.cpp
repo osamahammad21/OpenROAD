@@ -376,6 +376,14 @@ void GlobalRouter::setCapacities(int minRoutingLayer, int maxRoutingLayer)
       _vCapacities.push_back(_grid->getVerticalEdgesCapacities()[l - 1]);
     }
   }
+
+  for (int l = 1; l <= _grid->getNumLayers(); l++) {
+    int newCapH = _grid->getHorizontalEdgesCapacities()[l - 1] * 100;
+    _grid->updateHorizontalEdgesCapacities(l - 1, newCapH);
+
+    int newCapV = _grid->getVerticalEdgesCapacities()[l - 1] * 100;
+    _grid->updateVerticalEdgesCapacities(l - 1, newCapV);
+  }
 }
 
 Capacities GlobalRouter::saveCapacities(int previousMinLayer,
@@ -689,14 +697,17 @@ void GlobalRouter::initializeNets(std::vector<Net*>& nets)
         }
         bool isClock = (net->getSignalType() == odb::dbSigType::CLOCK);
 
-        int edgeCostForNet = computeTrackConsumption(net);
+        int numLayers = _grid->getNumLayers();
+        std::vector<int> edgeCostsPerLayer(numLayers+1, 1);
+        int edgeCostForNet = computeTrackConsumption(net, edgeCostsPerLayer);
 
         int netID = _fastRoute->addNet(net->getDbNet(),
                                        pinsOnGrid.size(),
                                        pinsOnGrid.size(),
                                        netAlpha,
                                        isClock,
-                                       edgeCostForNet);
+                                       edgeCostForNet,
+                                       edgeCostsPerLayer);
         for (RoutePt& pinPos : pinsOnGrid) {
           _fastRoute->addPin(netID, pinPos.x(), pinPos.y(), pinPos.layer());
         }
@@ -710,7 +721,7 @@ void GlobalRouter::initializeNets(std::vector<Net*>& nets)
   _fastRoute->initEdges();
 }
 
-int GlobalRouter::computeTrackConsumption(const Net* net)
+int GlobalRouter::computeTrackConsumption(const Net* net, std::vector<int>& edgeCostsPerLayer)
 {
   int trackConsumption = 1;
   odb::dbNet* db_net = net->getDbNet();
@@ -720,8 +731,9 @@ int GlobalRouter::computeTrackConsumption(const Net* net)
     ndr->getLayerRules(layer_rules);
 
     for (odb::dbTechLayerRule* layer_rule : layer_rules) {
+      int layerIdx = layer_rule->getLayer()->getRoutingLevel();
       RoutingTracks routingTracks =
-        getRoutingTracksByIndex(layer_rule->getLayer()->getRoutingLevel());
+        getRoutingTracksByIndex(layerIdx);
       int default_width = layer_rule->getLayer()->getWidth();
       int default_pitch = routingTracks.getTrackPitch();
       
@@ -730,6 +742,7 @@ int GlobalRouter::computeTrackConsumption(const Net* net)
       int ndr_pitch = 2 * (std::ceil(ndr_width/2 + ndr_spacing + default_width/2 - default_pitch));
 
       int consumption = std::ceil((float)ndr_pitch/default_pitch);
+      edgeCostsPerLayer[layerIdx-1] = consumption;
 
       trackConsumption = std::max(trackConsumption, consumption);
     }
@@ -1762,7 +1775,8 @@ GlobalRouter::ROUTE_ GlobalRouter::getRoute()
     for (int y = 1; y < yGrids; y++) {
       for (int x = 1; x < xGrids; x++) {
         int edgeCap
-            = _fastRoute->getEdgeCapacity(x - 1, y - 1, layer, x, y - 1, layer);
+            = _fastRoute->getEdgeCapacity(x - 1, y - 1, layer, x, y - 1, layer)
+              * 100;
         if (edgeCap != _grid->getHorizontalEdgesCapacities()[layer - 1]) {
           ADJUSTMENT_ adj;
           adj.firstX = x - 1;
@@ -1781,7 +1795,8 @@ GlobalRouter::ROUTE_ GlobalRouter::getRoute()
     for (int x = 1; x < xGrids; x++) {
       for (int y = 1; y < yGrids; y++) {
         int edgeCap
-            = _fastRoute->getEdgeCapacity(x - 1, y - 1, layer, x - 1, y, layer);
+            = _fastRoute->getEdgeCapacity(x - 1, y - 1, layer, x - 1, y, layer)
+              * 100;
         if (edgeCap != _grid->getVerticalEdgesCapacities()[layer - 1]) {
           ADJUSTMENT_ adj;
           adj.firstX = x - 1;
