@@ -832,6 +832,8 @@ class dbBlock : public dbObject
   ///
   dbModule* getTopModule();
 
+  void setTopModule(dbModule* top);
+
   ///
   /// Get the child blocks of this block.
   ///

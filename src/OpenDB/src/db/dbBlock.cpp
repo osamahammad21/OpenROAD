@@ -1578,6 +1578,12 @@ dbModule* dbBlock::getTopModule()
   return (dbModule*) block->_module_tbl->getPtr(block->_top_module);
 }
 
+void dbBlock::setTopModule(dbModule* top)
+{
+  _dbBlock* block = (_dbBlock*) this;
+  block->_top_module = top->getId();
+}
+
 dbSet<dbBlock> dbBlock::getChildren()
 {
   _dbBlock* block = (_dbBlock*) this;
