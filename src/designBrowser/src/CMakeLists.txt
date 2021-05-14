@@ -10,3 +10,7 @@ target_include_directories(designBrowser
     ${OPENSTA_INCLUDE_DIRS}
     ${TCL_INCLUDE_PATH}
 )
+
+target_link_libraries(designBrowser
+    utl
+)

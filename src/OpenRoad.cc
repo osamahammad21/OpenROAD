@@ -208,7 +208,7 @@ OpenRoad::init(Tcl_Interp *tcl_interp)
   verilog_network_ = makeDbVerilogNetwork();
   ioPlacer_ = makeIoplacer();
   resizer_ = makeResizer();
-  browser_ = makeDesignBrowser();
+  browser_ = makeDesignBrowser(logger_);
   opendp_ = makeOpendp();
   finale_ = makeFinale();
   fastRoute_ = makeFastRoute();
