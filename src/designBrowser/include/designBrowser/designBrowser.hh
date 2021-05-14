@@ -26,52 +26,6 @@ std::string numberToString(double a);
 bool cmpPair(std::pair<sta::LibertyCell*, int>& a,
              std::pair<sta::LibertyCell*, int>& b);
 
-//******************************************************
-//************ Struct Connection
-//******************************************************
-struct Connection
-{
-  sta::Instance* _driver = nullptr;
-  sta::Instance* _load = nullptr;
-  int _bundle_net = 0;
-};
-
-Connection* createConnection(sta::Instance* driver, sta::Instance* load);
-
-std::vector<Connection>::iterator connectionFind(
-    std::vector<Connection>& connections,
-    Connection& c);
-
-//******************************************************
-//************ Struct CommonConnection
-//******************************************************
-struct CommonConnection
-{
-  sta::Instance* _load_a = nullptr;
-  sta::Instance* _load_b = nullptr;
-  int _bundle_net = 0;
-};
-
-CommonConnection* createCommonConnection(sta::Instance* load_a,
-                                         sta::Instance* load_b);
-
-std::vector<CommonConnection>::iterator commonConnectionFind(
-    std::vector<CommonConnection>& common_connections,
-    CommonConnection& c);
-
-//******************************************************
-//************ Struct LumpedConnection
-//******************************************************
-struct LumpedConnection
-{
-  int _fanout = 0;
-  int _fanin = 0;
-  int _common_fanin = 0;
-};
-
-LumpedConnection* createLumpedConnection(int fanout,
-                                         int fanin,
-                                         int common_fanin = 0);
 
 //*****************************************************
 //***********  Class Module
@@ -89,10 +43,6 @@ class Module
   std::map<sta::LibertyCell*, int> _total_map_cells;
   std::vector<sta::Net*> _nets;  // the nets of within current module
 
-  std::vector<Connection> _connections;
-  std::vector<CommonConnection> _common_connections;
-  std::map<std::string, std::map<std::string, LumpedConnection>>
-      _lumped_connections;
 
   int _total_std_cells = 0;
   int _total_comb_cells = 0;
@@ -112,15 +62,9 @@ class Module
   double _total_seq_cell_area = 0.0;      // unit: micron ^ 2
   double _total_buf_inv_cell_area = 0.0;  // unit: micron ^2
 
-  bool specifyConnectionsFlag = false;
   bool detailed_flag = false;
   // Utility function
   void printNetUtil(sta::Net* net, std::ofstream& file);
-
-  void addConnectionUtil(sta::Net* net);
-  void calculateConnectionsUtil();
-
-  void calculateCommonConnectionsUtil();
 
   void calculateAverageCombFanoutsUtil(sta::Instance* inst);
 
@@ -206,21 +150,6 @@ class Module
   void addNet(sta::Net* net) { _nets.push_back(net); }
 
   void specifyNumberPins(int num_pins) { _num_pins = num_pins; }
-
-  // Function of specifying values
-  void specifyConnections()
-  {
-    if (specifyConnectionsFlag == false) {
-      specifyConnectionsFlag = true;
-      std::vector<sta::Net*>::iterator vec_net_it;
-      for (vec_net_it = _nets.begin(); vec_net_it != _nets.end();
-           vec_net_it++) {
-        addConnectionUtil(*vec_net_it);
-      }
-      calculateConnectionsUtil();
-      calculateCommonConnectionsUtil();
-    }
-  }
 
   void calculateAverageCombFanouts();
 
@@ -309,36 +238,6 @@ class Module
       const char* net_name = _network->name(*vec_net_it);
       file << "Net name:   " << net_name << std::endl;
       printNetUtil(*vec_net_it, file);
-    }
-  }
-
-  void printConnectionInfo(std::ofstream& file)
-  {
-    file << "Connection Information" << std::endl;
-    file << std::endl;
-
-    std::map<std::string, std::map<std::string, LumpedConnection>>::iterator
-        map_map_it;
-    std::map<std::string, LumpedConnection>::iterator map_it;
-
-    for (map_map_it = _lumped_connections.begin();
-         map_map_it != _lumped_connections.end();
-         map_map_it++) {
-      file << std::endl;
-      file << "Show the connection information of module:   "
-           << map_map_it->first << std::endl;
-      for (map_it = map_map_it->second.begin();
-           map_it != map_map_it->second.end();
-           map_it++) {
-        file << "\t\t\t"
-             << "module:   " << std::setw(40) << std::left << map_it->first
-             << "\t\t\t"
-             << "number of nets:  ";
-        file << map_it->second._fanout + map_it->second._fanin << " ( ";
-        file << map_it->second._fanout << " , ";
-        file << map_it->second._fanin << " , ";
-        file << map_it->second._common_fanin << " ) " << std::endl;
-      }
     }
   }
 
@@ -455,6 +354,7 @@ class designBrowserKernel
 
  public:
   designBrowserKernel(utl::Logger* loggerIn) : logger_(loggerIn) {}
+  
   void init(dbVerilogNetwork* network, odb::dbDatabase* db)
   {
     _network = network;
@@ -473,8 +373,6 @@ class designBrowserKernel
                        const char* key);
 
   void reportNet(std::string name, std::ofstream& file);
-
-  void reportConnection(std::string name, std::ofstream& file);
 
   void reportMacro(std::string name, std::ofstream& file);
 
@@ -510,10 +408,6 @@ void dbReportLogicArea(designBrowserKernel* browser,
 void dbReportLogicNet(designBrowserKernel* browser,
                       const char* name,
                       const char* file_name);
-
-void dbReportLogicConnection(designBrowserKernel* browser,
-                             const char* name,
-                             const char* file_name);
 
 void dbReportMacro(designBrowserKernel* browser,
                    const char* name,

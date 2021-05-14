@@ -273,12 +273,6 @@ void report_logic_net_cmd(const char *name, const char *file_name)
     ord->reportLogicNet(name, file_name);
 }
  
-void report_logic_connection_cmd(const char *name, const char *file_name)
-{
-    OpenRoad *ord = getOpenRoad();
-    ord->reportLogicConnection(name, file_name);
-}
- 
 void report_macro_cmd(const char *name, const char *file_name)
 {
     OpenRoad *ord = getOpenRoad();

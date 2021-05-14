@@ -204,9 +204,7 @@ public:
   void reportLogicArea(const char *name, const char *file_name, bool detailed, const char *key);
  
   void reportLogicNet(const char *name, const char *file_name);
- 
-  void reportLogicConnection(const char *name, const char *file_name);
- 
+  
   void reportMacro(const char *name, const char *file_name);
 
   void reportDesignFile(const char *file_name);
