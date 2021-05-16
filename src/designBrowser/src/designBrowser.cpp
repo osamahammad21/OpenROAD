@@ -231,6 +231,53 @@ Node* createNode(Module* module)
   return node;
 }
 
+// *******************************************************
+// *
+
+// *******************************************************
+// ************ Struct ModuleInfo
+// *******************************************************
+void designBrowserKernel::updateModuleInfo(odb::dbModule* mod)
+{  
+  ModuleData data;
+  for(auto inst : mod->getInsts())
+  {
+    auto master = inst->getMaster();
+    double cellArea = area(master);
+    if(master->isBlock())
+    {
+      data.macros++;
+      data.macro_area += cellArea;
+    }
+    else {
+      data.std_cell_area += cellArea;
+      data.std_cells++;
+      if(master->isSequential())
+      {
+        data.total_seq_cells++;
+        data.total_seq_cell_area+= cellArea;
+      } else {
+        data.total_comb_cells++;
+        data.total_comb_cell_pins+= master->getMTermCount();
+        data.total_comb_cell_area+= cellArea;
+      }
+    }
+    data.total_macros = data.macros;
+    data.num_pins += master->getMTermCount();
+  }
+  data.total_macro_area = data.macro_area;
+  for(auto child : mod->getChildren())
+  {
+    auto childMod = child->getMaster();
+    uint cid = childMod->getId();
+    if(!module_info_[cid].valid)
+      updateModuleInfo(childMod);
+    data.appendData(module_info_[cid]);
+  }
+  data.valid = true;
+  module_info_[mod->getId()] = data;
+}
+
 // ************************************************************************
 // ************ Class designBrowserKernel
 // ************************************************************************
@@ -296,7 +343,6 @@ void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
     if(modinst == nullptr)
       logger_->error(utl::DBR, 2, "dbModInst creation failed for {}:{}", _network->name(cell), _network->name(inst));
   }
-
   InstanceChildIterator* child_iter = _network->childIterator(inst);
   while (child_iter->hasNext()) {
     Instance* child = child_iter->next();
@@ -311,10 +357,24 @@ void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
       auto dbinst = block->findInst(path.c_str());
       if (dbinst == nullptr)
         logger_->error(utl::DBR, 3, "Inst {} is not found in database for module {}", _network->name(child), mod->getName());
-      else
-        mod->addInst(dbinst);
+      mod->addInst(dbinst);
+      auto childCell = _network->cell(child);
+      auto libcell = _network->libertyCell(childCell);
+      //buf_inv_cell hack
+      if(libcell->isBuffer() || libcell->isInverter()){
+        module_info_[mod->getId()].total_buf_inv_cells++;
+        module_info_[mod->getId()].total_buf_inv_cell_area += area(dbinst->getMaster());
+      }
     }
   }
+
+  int pin_count = 0;
+  InstancePinIterator* pin_iter = _network->pinIterator(inst);
+  while (pin_iter->hasNext()) {
+    Pin* pin = pin_iter->next();
+    pin_count++;
+  }
+  mod->setNumPins(pin_count);
 }
 
 vector<Module>::iterator designBrowserKernel::moduleFind(Instance* inst)
@@ -690,8 +750,9 @@ void designBrowserKernel::linkDesignBrowserKernel(dbVerilogNetwork* network,
 {
   init(network, db);
   linkDesignBrowserKernelUtil(network->topInstance());
-  createTree();
   createDBModule(network->topInstance());
+  createTree();
+  updateModuleInfo(db->getChip()->getBlock()->getTopModule());
 }
 
 void designBrowserKernel::traverseDepthUtil(Node* node,
@@ -818,27 +879,42 @@ void designBrowserKernel::reportLogicAreaKeyCellCountUtil(Node* node,
   }
 }
 
-void designBrowserKernel::reportDesignFileUtil(Node* node,
+void printLogicalInfo(std::ofstream& file, odb::dbModule* mod, int level, ModuleData data)
+{
+  file << "\"module_name\" : \"" <<mod->getName() << "\"," << std::endl;
+  file << "\"level\" : " << level << "," << std::endl;
+  file << "\"pins\" : " << mod->getNumPins() << "," << std::endl;
+  file << "\"total_insts\" : " << data.getTotalStdCells() << "," << std::endl;
+  file << "\"total_macros\" : " << data.total_macros << "," << std::endl;
+  file << "\"total_area\" : "
+        << numberToString(data.getTotalArea()) << ","
+        << std::endl;
+  file << "\"local_insts\" : " << data.std_cells << "," << std::endl;
+  file << "\"local_macros\" : " << data.macros << "," << std::endl;
+}
+void designBrowserKernel::reportDesignFileUtil(odb::dbModule* mod,
                                                int level,
                                                ofstream& file)
 {
   level = level + 1;
   file << "{" << endl;
-  file << "\"local_instance_name\" : \"" << node->_module->getVerilogName()
+  file << "\"local_instance_name\" : \"" <<  mod->getModInst()->getName()
        << "\"," << endl;
-  file << "\"instance_name\" : \"" << node->_module->getPathName() << "\","
+  file << "\"instance_name\" : \"" << mod->getModInst()->getHierarchalName() << "\","
        << endl;
   file << "\"module\" : {" << endl;
-  node->_module->printLogicalInfo(file, level);
+  printLogicalInfo(file, mod, level, module_info_[mod->getId()]);
   file << "\"module_instances\" : [" << endl;
   size_t i = 0;
-  if (node->_children.size() != 0) {
-    for (i = 0; i < node->_children.size() - 1; i++) {
-      reportDesignFileUtil(node->_children[i], level, file);
-      file << "," << endl;
+  uint childrenSz = mod->getChildren().size();
+  if (childrenSz > 0) {
+    uint cnt = 0;
+    for(auto child : mod->getChildren())
+    {
+      reportDesignFileUtil(child->getMaster(), level, file);
+      if(++cnt < childrenSz)
+        file << "," << endl;
     }
-
-    reportDesignFileUtil(node->_children[i], level, file);
   }
   file << "]" << endl;
   file << "}" << endl;
@@ -895,16 +971,19 @@ void designBrowserKernel::reportDesignFile(ofstream& file)
 {
   file << "{" << endl;
   file << "\"logical_hierarchy\" : {" << endl;
-  _root->_module->printLogicalInfo(file, 0);
+  auto mod = _db->getChip()->getBlock()->getTopModule();
+  printLogicalInfo(file, mod, 0, module_info_[mod->getId()]);
   file << "\"module_instances\" : [" << endl;
-  size_t i = 0;
-  if (_root->_children.size() != 0) {
-    for (i = 0; i < _root->_children.size() - 1; i++) {
-      reportDesignFileUtil(_root->_children[i], 0, file);
-      file << "," << endl;
+  uint childrenSz = mod->getChildren().size();
+  if(childrenSz > 0)
+  {
+    uint cnt = 0;
+    for(auto child : mod->getChildren())
+    {
+      reportDesignFileUtil(child->getMaster(), 0, file);
+      if(++cnt < childrenSz)
+        file << "," << endl;
     }
-
-    reportDesignFileUtil(_root->_children[i], 0, file);
   }
 
   file << "]" << endl;

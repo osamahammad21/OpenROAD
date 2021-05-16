@@ -30,6 +30,50 @@ bool cmpPair(std::pair<sta::LibertyCell*, int>& a,
 //*****************************************************
 //***********  Class Module
 //*****************************************************
+struct ModuleData {
+  int total_comb_cells = 0;
+  int total_seq_cells = 0;
+  int total_buf_inv_cells = 0;
+  int total_macros = 0;
+  int total_comb_cell_pins = 0;
+  int macros = 0;
+  int std_cells = 0;
+  int num_pins = 0;
+  double total_macro_area = 0.0;
+  double std_cell_area = 0.0;
+  double macro_area = 0.0;
+  double total_comb_cell_area = 0.0;
+  double total_seq_cell_area = 0.0;
+  double total_buf_inv_cell_area = 0.0;
+
+  bool valid = false;
+
+  int getTotalStdCells() const
+  {
+    return total_comb_cells + total_seq_cells;
+  }
+  double getTotalStdCellArea() const
+  {
+    return total_seq_cell_area + total_comb_cell_area;
+  }
+  double getTotalArea() const
+  {
+    return total_macro_area + getTotalStdCellArea();
+  }
+  void appendData(const ModuleData& data)
+  {
+    total_comb_cells += data.total_comb_cells;
+    total_seq_cells += data.total_seq_cells;
+    total_buf_inv_cells += data.total_buf_inv_cells;
+    total_macros += data.total_macros;
+    total_comb_cell_pins += data.total_comb_cell_pins;
+    total_macro_area += data.total_macro_area;
+    total_comb_cell_area += data.total_comb_cell_area;
+    total_seq_cell_area += data.total_seq_cell_area;
+    total_buf_inv_cell_area += data.total_buf_inv_cell_area;
+  }
+};
+
 class Module
 {
  private:
@@ -309,11 +353,15 @@ class designBrowserKernel
   std::queue<sta::Instance*> _module_queue;
   std::vector<Module> _module_list;
   int _level;
+  std::map<uint, ModuleData> module_info_;
+
+  std::map<odb::dbId<odb::dbModule>, ModuleData> info_map; // key is module id in db
 
   std::vector<Module>::iterator moduleFind(sta::Instance* inst);
   Node* findNode(Node* node, std::string name);
 
   void createTreeUtil(Node* node);
+  void updateModuleInfo(odb::dbModule* mod);
   int specifyTotalStdCellsUtil(Node* node);
   int specifyTotalMacrosUtil(Node* node);
   int specifyTotalCombSeqCellsUtil(Node* node);
@@ -327,7 +375,7 @@ class designBrowserKernel
   double specifyTotalBufInvCellAreaUtil(Node* node);
 
   void addTotalMapCellsUtil(Node* node, Module* module);
-
+  
   //////////////////////////////////////////////////////////////////////////////
   // Note:  dbuToMeters, metersToDbu, area are copied from Resizer.cc file
   double dbuToMicrons(int dist) const;
@@ -350,7 +398,7 @@ class designBrowserKernel
 
   void reportMacroUtil(Node* node, std::ofstream& file);
 
-  void reportDesignFileUtil(Node* node, int level, std::ofstream& file);
+  void reportDesignFileUtil(odb::dbModule* mod, int level, std::ofstream& file);
 
  public:
   designBrowserKernel(utl::Logger* loggerIn) : logger_(loggerIn) {}

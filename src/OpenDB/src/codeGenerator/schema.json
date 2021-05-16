@@ -61,6 +61,10 @@
           "type":"dbId<_dbModInst>",
           "flags":["no-set"],
           "parent":"dbBlock"
+        },
+        {
+          "name":"num_pins",
+          "type":"uint"
         }
       ],
       "constructors":[],

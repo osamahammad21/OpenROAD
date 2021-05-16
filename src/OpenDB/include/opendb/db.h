@@ -8459,6 +8459,10 @@ class dbModule : public dbObject
 
   dbModInst* getModInst() const;
 
+  void setNumPins(uint num_pins);
+
+  uint getNumPins() const;
+
   // User Code Begin dbModule
   void addInst(dbInst* inst);
 

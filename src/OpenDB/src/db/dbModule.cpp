@@ -69,6 +69,9 @@ bool _dbModule::operator==(const _dbModule& rhs) const
   if (_mod_inst != rhs._mod_inst)
     return false;
 
+  if (num_pins != rhs.num_pins)
+    return false;
+
   // User Code Begin ==
   // User Code End ==
   return true;
@@ -92,6 +95,7 @@ void _dbModule::differences(dbDiff& diff,
   DIFF_FIELD(_insts);
   DIFF_FIELD(_modinsts);
   DIFF_FIELD(_mod_inst);
+  DIFF_FIELD(num_pins);
   // User Code Begin Differences
   // User Code End Differences
   DIFF_END
@@ -104,6 +108,7 @@ void _dbModule::out(dbDiff& diff, char side, const char* field) const
   DIFF_OUT_FIELD(_insts);
   DIFF_OUT_FIELD(_modinsts);
   DIFF_OUT_FIELD(_mod_inst);
+  DIFF_OUT_FIELD(num_pins);
 
   // User Code Begin Out
   // User Code End Out
@@ -125,6 +130,7 @@ _dbModule::_dbModule(_dbDatabase* db, const _dbModule& r)
   _insts = r._insts;
   _modinsts = r._modinsts;
   _mod_inst = r._mod_inst;
+  num_pins = r.num_pins;
   // User Code Begin CopyConstructor
   // User Code End CopyConstructor
 }
@@ -136,6 +142,7 @@ dbIStream& operator>>(dbIStream& stream, _dbModule& obj)
   stream >> obj._insts;
   stream >> obj._modinsts;
   stream >> obj._mod_inst;
+  stream >> obj.num_pins;
   // User Code Begin >>
   // User Code End >>
   return stream;
@@ -147,6 +154,7 @@ dbOStream& operator<<(dbOStream& stream, const _dbModule& obj)
   stream << obj._insts;
   stream << obj._modinsts;
   stream << obj._mod_inst;
+  stream << obj.num_pins;
   // User Code Begin <<
   // User Code End <<
   return stream;
@@ -182,6 +190,19 @@ dbModInst* dbModule::getModInst() const
     return NULL;
   _dbBlock* par = (_dbBlock*) obj->getOwner();
   return (dbModInst*) par->_modinst_tbl->getPtr(obj->_mod_inst);
+}
+
+void dbModule::setNumPins(uint num_pins)
+{
+  _dbModule* obj = (_dbModule*) this;
+
+  obj->num_pins = num_pins;
+}
+
+uint dbModule::getNumPins() const
+{
+  _dbModule* obj = (_dbModule*) this;
+  return obj->num_pins;
 }
 
 // User Code Begin dbModulePublicMethods

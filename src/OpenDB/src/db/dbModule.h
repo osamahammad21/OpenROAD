@@ -65,6 +65,7 @@ class _dbModule : public _dbObject
   dbId<_dbInst> _insts;
   dbId<_dbModInst> _modinsts;
   dbId<_dbModInst> _mod_inst;
+  uint num_pins;
 
   // User Code Begin Fields
   // User Code End Fields
