@@ -267,12 +267,6 @@ void report_logic_area_cmd(const char *name, const char *file_name, bool detaile
     ord->reportLogicArea(name, file_name, detailed, key);
 }
  
-void report_logic_net_cmd(const char *name, const char *file_name)
-{
-    OpenRoad *ord = getOpenRoad();
-    ord->reportLogicNet(name, file_name);
-}
- 
 void report_macro_cmd(const char *name, const char *file_name)
 {
     OpenRoad *ord = getOpenRoad();

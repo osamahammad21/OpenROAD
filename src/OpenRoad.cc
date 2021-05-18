@@ -423,11 +423,6 @@ OpenRoad::writeVerilog(const char *filename,
      dbReportLogicArea(browser_, name, file_name, detailed, key);
  }
 
- void OpenRoad::reportLogicNet(const char *name, const char *file_name)
- {
-     dbReportLogicNet(browser_, name, file_name);
- }
-
  void OpenRoad::reportMacro(const char *name, const char *file_name)
  {
      dbReportMacro(browser_, name, file_name);

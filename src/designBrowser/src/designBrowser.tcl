@@ -72,20 +72,6 @@ proc report_area { args } {
     }
 }
 
-
-sta::define_cmd_args "report_logical_net" {[-module module] \
-                                      [-rpt_file rpt_file] }
-proc report_logical_net { args } {
-    sta::parse_key_args "report_logical_net" args keys {-module -rpt_file} flags { }
-    if { [info exists keys(-module)] && [info exists keys(-rpt_file)] } {
-        set module $keys(-module)
-        set rpt_file $keys(-rpt_file)
-        ord::report_logic_net_cmd $module $rpt_file
-    } else {
-        ord::error "report_logical_net -module module -rpt_file rpt_file"
-    }
-}
-
 sta::define_cmd_args "report_macro" {[-module module] \
                                       [-rpt_file rpt_file] }
 proc report_macro { args } {
