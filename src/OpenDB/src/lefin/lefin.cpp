@@ -190,7 +190,7 @@ bool lefin::addGeoms(dbObject* object, bool is_pin, lefiGeometries* geometry)
   int count = geometry->numItems();
   dbTechLayer* layer = NULL;
   int dw = 0;
-  int designRuleWidth = 0;
+  int designRuleWidth = -1;
 
   for (int i = 0; i < count; i++) {
     _master_modified = true;
@@ -810,8 +810,10 @@ void lefin::layer(lefiLayer* layer)
       lefiTwoWidths* cur_two = cur_sptbl->twoWidths();
 
       l->initTwoWidths(cur_two->numWidth());
+      int defaultPrl = -1;
       for (int i = 0; i < cur_two->numWidth(); i++) {
-        int prl = cur_two->hasWidthPRL(i) ? dbdist(cur_two->widthPRL(i)) : -1;
+        int prl = cur_two->hasWidthPRL(i) ? dbdist(cur_two->widthPRL(i)) : defaultPrl;
+        defaultPrl = prl;
         l->addTwoWidthsIndexEntry(dbdist(cur_two->width(i)), prl);
       }
 

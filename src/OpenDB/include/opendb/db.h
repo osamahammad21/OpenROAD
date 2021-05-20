@@ -1589,6 +1589,11 @@ class dbBTerm : public dbObject
   bool rename(const char* name);
 
   ///
+  /// Get bbox of this term (ie the bbox of the bpins)
+  ///
+  Rect getBBox();
+
+  ///
   /// Set the signal type of this block-terminal.
   ///
   void setSigType(dbSigType type);
@@ -3208,6 +3213,11 @@ class dbITerm : public dbObject
   /// Get the master-terminal that this instance-terminal is representing.
   ///
   dbMTerm* getMTerm();
+
+  ///
+  /// Get bbox of this iterm (ie the transfromed bbox of the mterm)
+  ///
+  Rect getBBox();
 
   ///
   /// Get the block this instance-terminal belongs too.
@@ -5526,6 +5536,11 @@ class dbMTerm : public dbObject
   dbSet<dbMPin> getMPins();
 
   ///
+  /// Get bbox of this term (ie the bbox of the getMPins())
+  ///
+  Rect getBBox();
+
+  ///
   /// Get the target points of this terminal.
   ///
   dbSet<dbTarget> getTargets();
@@ -5603,6 +5618,11 @@ class dbMPin : public dbObject
   /// Get the geometry of this pin.
   ///
   dbSet<dbBox> getGeometry();
+
+  ///
+  /// Get bbox of this pin (ie the bbox of getGeometry())
+  ///
+  Rect getBBox();
 
   ///
   /// Create a new physical pin.
@@ -6901,6 +6921,9 @@ class dbTechLayer : public dbObject
   bool isRectOnlyExceptNonCorePins() const;
 
   // User Code Begin dbTechLayer
+  int findV55Spacing(const int width, const int prl) const;
+
+  int findTwSpacing(const int width1, const int width2, const int prl) const;
 
   void setLef58Type(LEF58_TYPE type);
 

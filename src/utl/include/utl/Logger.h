@@ -186,6 +186,7 @@ class Logger
   }
 
   void addSink(spdlog::sink_ptr sink);
+  void addMetricsSink(const char *metrics_filename);
 
  private:
   template <typename... Args>
