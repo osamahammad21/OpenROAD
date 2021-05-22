@@ -127,36 +127,6 @@ bool operator<(const RoutePt& p1, const RoutePt& p2);
 class GlobalRouter
 {
  public:
-  struct ADJUSTMENT_
-  {
-    int firstX;
-    int firstY;
-    int firstLayer;
-    int finalX;
-    int finalY;
-    int finalLayer;
-    int edgeCapacity;
-  };
-
-  struct ROUTE_
-  {
-    int gridCountX;
-    int gridCountY;
-    int numLayers;
-    std::vector<int> verticalEdgesCapacities;
-    std::vector<int> horizontalEdgesCapacities;
-    std::vector<int> minWireWidths;
-    std::vector<int> minWireSpacings;
-    std::vector<int> viaSpacings;
-    long gridOriginX;
-    long gridOriginY;
-    long tileWidth;
-    long tileHeight;
-    int blockPorosity;
-    int numAdjustments;
-    std::vector<ADJUSTMENT_> adjustments;
-  };
-
   GlobalRouter() = default;
   ~GlobalRouter();
   void init(ord::OpenRoad* openroad);
@@ -177,7 +147,6 @@ class GlobalRouter
                            int maxY,
                            int layer,
                            float reductionPercentage);
-  void setLayerPitch(int layer, float pitch);
   void addAlphaForNet(char* netName, float alpha);
   void setVerbose(const int v);
   void setOverflowIterations(int iterations);
@@ -200,9 +169,6 @@ class GlobalRouter
   // repair antenna public functions
   void repairAntennas(sta::LibertyPort* diodePort);
   void addDirtyNet(odb::dbNet* net);
-
-  // congestion drive replace functions
-  ROUTE_ getRoute();
 
   double dbuToMicrons(int64_t dbu);
 
@@ -230,6 +196,7 @@ class GlobalRouter
   // main functions
   void initCoreGrid(int maxRoutingLayer);
   void initRoutingLayers();
+  std::vector<std::pair<int, int>> calcLayerPitches(int maxLayer);
   void initRoutingTracks(int maxRoutingLayer);
   void setCapacities(int minRoutingLayer, int maxRoutingLayer);
   void setSpacingsAndMinWidths();
@@ -244,7 +211,7 @@ class GlobalRouter
   void computeObstructionsAdjustments();
   void computeWirelength();
   std::vector<Pin*> getAllPorts();
-  int computeTrackConsumption(const Net* net);
+  int computeTrackConsumption(const Net* net, std::vector<int>& edgeCostsPerLayer);
 
   // aux functions
   void findPins(Net* net);
@@ -268,10 +235,12 @@ class GlobalRouter
   GSegment createFakePin(Pin pin, odb::Point& pinPosition, RoutingLayer layer);
   odb::Point findFakePinPosition(Pin& pin, odb::dbNet* db_net);
   void initAdjustments();
-  void initPitches();
   odb::Point getRectMiddle(const odb::Rect& rect);
   NetRouteMap findRouting(std::vector<Net*>& nets, int minRoutingLayer, int maxRoutingLayer);
   void print(GRoute& route);
+  void reportLayerSettings(int minRoutingLayer, int maxRoutingLayer);
+  void reportResources();
+  void reportCongestion();
 
   // check functions
   void checkPinPlacement();
@@ -290,9 +259,8 @@ class GlobalRouter
   void initGrid(int maxLayer);
   void initRoutingLayers(std::vector<RoutingLayer>& routingLayers);
   void initRoutingTracks(std::vector<RoutingTracks>& allRoutingTracks,
-                         int maxLayer,
-                         const std::vector<float>& layerPitches);
-  void computeCapacities(int maxLayer, const std::vector<float>& layerPitches);
+                         int maxLayer);
+  void computeCapacities(int maxLayer);
   void computeSpacingsAndMinWidth(int maxLayer);
   void initNetlist();
   void addNets(std::set<odb::dbNet*, cmpById>& db_nets);
@@ -347,9 +315,6 @@ class GlobalRouter
   // Region adjustment variables
   std::vector<RegionAdjustment> _regionAdjustments;
 
-  // Pitches variables
-  std::vector<float> _layerPitches;
-
   // Clock net routing variables
   bool _pdRev;
   float _alpha;
@@ -374,6 +339,5 @@ class GlobalRouter
 };
 
 std::string getITermName(odb::dbITerm* iterm);
-std::ostream& operator<<(std::ostream& os, const GlobalRouter::ROUTE_& route);
 
 }  // namespace grt

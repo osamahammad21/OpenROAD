@@ -54,6 +54,7 @@ namespace utl {
     X(DPL) \
     X(DRT) \
     X(FIN) \
+    X(FLW) \
     X(GPL) \
     X(GRT) \
     X(GUI) \
@@ -184,6 +185,7 @@ class Logger
   }
 
   void addSink(spdlog::sink_ptr sink);
+  void addMetricsSink(const char *metrics_filename);
 
  private:
   template <typename... Args>

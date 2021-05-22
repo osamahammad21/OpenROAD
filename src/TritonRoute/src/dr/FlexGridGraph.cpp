@@ -26,12 +26,13 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
+#include "dr/FlexGridGraph.h"
+
 #include <fstream>
 #include <iostream>
 #include <map>
 
 #include "dr/FlexDR.h"
-#include "dr/FlexGridGraph.h"
 
 using namespace std;
 using namespace fr;
@@ -94,6 +95,16 @@ bool FlexGridGraph::outOfDieVia(frMIdx x,
   viaBox.shift(xCoords_[x], yCoords_[y]);
   return !dieBox.contains(viaBox);
 }
+
+bool FlexGridGraph::isWorkerBorder(frMIdx v, bool isVert)
+{
+  if (isVert)
+    return xCoords_[v] == drWorker_->getRouteBox().left()
+           || xCoords_[v] == drWorker_->getRouteBox().right();
+  return yCoords_[v] == drWorker_->getRouteBox().bottom()
+         || yCoords_[v] == drWorker_->getRouteBox().top();
+}
+
 void FlexGridGraph::initEdges(
     const map<frCoord, map<frLayerNum, frTrackPattern*>>& xMap,
     const map<frCoord, map<frLayerNum, frTrackPattern*>>& yMap,
@@ -144,7 +155,8 @@ void FlexGridGraph::initEdges(
             if (layer->getLef58RightWayOnGridOnlyConstraint() == nullptr
                 || yIt->second != nullptr) {
               addEdge(xIdx, yIdx, zIdx, frDirEnum::E, bbox, initDR);
-              if (yIt->second == nullptr || outOfDiePlanar) {
+              if (yIt->second == nullptr || outOfDiePlanar
+                  || isWorkerBorder(yIdx, false)) {
                 setGridCostE(xIdx, yIdx, zIdx);
               }
             }
@@ -172,7 +184,8 @@ void FlexGridGraph::initEdges(
             if (layer->getLef58RightWayOnGridOnlyConstraint() == nullptr
                 || xIt->second != nullptr) {
               addEdge(xIdx, yIdx, zIdx, frDirEnum::N, bbox, initDR);
-              if (xIt->second == nullptr || outOfDiePlanar) {
+              if (xIt->second == nullptr || outOfDiePlanar
+                  || isWorkerBorder(xIdx, true)) {
                 setGridCostN(xIdx, yIdx, zIdx);
               }
             }

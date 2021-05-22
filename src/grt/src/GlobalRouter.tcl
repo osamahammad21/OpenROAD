@@ -62,23 +62,6 @@ proc set_global_routing_layer_adjustment { args } {
   }
 }
 
-sta::define_cmd_args "set_global_routing_layer_pitch" { layer pitch }
-
-proc set_global_routing_layer_pitch { args } {
-  if {[llength $args] == 2} {
-    lassign $args layer pitch
-
-    set layer_idx [grt::parse_layer_name $layer]
-
-    grt::check_routing_layer $layer_idx
-    sta::check_positive_float "pitch" $pitch
-
-    grt::set_layer_pitch $layer_idx $pitch
-  } else {
-    utl::error GRT 45 "set_global_routing_layer_pitch: Wrong number of arguments."
-  }
-}
-
 sta::define_cmd_args "set_pdrev_topology_priority" { net alpha }
 
 proc set_pdrev_topology_priority { args } {

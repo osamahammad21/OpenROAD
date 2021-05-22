@@ -523,6 +523,10 @@ class dbBox : public dbObject
   ///
   uint getDX();
 
+  int getDesignRuleWidth() const;
+
+  void setDesignRuleWidth(int);
+
   ///
   /// Get the height (yMax-yMin) of the box.
   ///
@@ -1581,6 +1585,11 @@ class dbBTerm : public dbObject
   /// Returns false if a bterm with the same name already exists.
   ///
   bool rename(const char* name);
+
+  ///
+  /// Get bbox of this term (ie the bbox of the bpins)
+  ///
+  Rect getBBox();
 
   ///
   /// Set the signal type of this block-terminal.
@@ -3202,6 +3211,11 @@ class dbITerm : public dbObject
   /// Get the master-terminal that this instance-terminal is representing.
   ///
   dbMTerm* getMTerm();
+
+  ///
+  /// Get bbox of this iterm (ie the transfromed bbox of the mterm)
+  ///
+  Rect getBBox();
 
   ///
   /// Get the block this instance-terminal belongs too.
@@ -5520,6 +5534,11 @@ class dbMTerm : public dbObject
   dbSet<dbMPin> getMPins();
 
   ///
+  /// Get bbox of this term (ie the bbox of the getMPins())
+  ///
+  Rect getBBox();
+
+  ///
   /// Get the target points of this terminal.
   ///
   dbSet<dbTarget> getTargets();
@@ -5597,6 +5616,11 @@ class dbMPin : public dbObject
   /// Get the geometry of this pin.
   ///
   dbSet<dbBox> getGeometry();
+
+  ///
+  /// Get bbox of this pin (ie the bbox of getGeometry())
+  ///
+  Rect getBBox();
 
   ///
   /// Create a new physical pin.
@@ -6895,6 +6919,9 @@ class dbTechLayer : public dbObject
   bool isRectOnlyExceptNonCorePins() const;
 
   // User Code Begin dbTechLayer
+  int findV55Spacing(const int width, const int prl) const;
+
+  int findTwSpacing(const int width1, const int width2, const int prl) const;
 
   void setLef58Type(LEF58_TYPE type);
 
@@ -8588,6 +8615,9 @@ class dbGCellGrid : public dbObject
     uint horizontal_capacity = 0;
     uint vertical_capacity = 0;
     uint up_capacity = 0;
+    uint horizontal_blockage = 0;
+    uint vertical_blockage = 0;
+    uint up_blockage = 0;
   };
   // User Code Begin dbGCellGridEnums
   // User Code End dbGCellGridEnums
@@ -8665,6 +8695,12 @@ class dbGCellGrid : public dbObject
 
   uint getUpUsage(dbTechLayer* layer, uint x_idx, uint y_idx) const;
 
+  uint getHorizontalBlockage(dbTechLayer* layer, uint x_idx, uint y_idx) const;
+
+  uint getVerticalBlockage(dbTechLayer* layer, uint x_idx, uint y_idx) const;
+
+  uint getUpBlockage(dbTechLayer* layer, uint x_idx, uint y_idx) const;
+
   void setHorizontalCapacity(dbTechLayer* layer,
                              uint x_idx,
                              uint y_idx,
@@ -8683,6 +8719,18 @@ class dbGCellGrid : public dbObject
 
   void setUpUsage(dbTechLayer* layer, uint x_idx, uint y_idx, uint use);
 
+  void setHorizontalBlockage(dbTechLayer* layer,
+                             uint x_idx,
+                             uint y_idx,
+                             uint blockage);
+
+  void setVerticalBlockage(dbTechLayer* layer,
+                           uint x_idx,
+                           uint y_idx,
+                           uint blockage);
+
+  void setUpBlockage(dbTechLayer* layer, uint x_idx, uint y_idx, uint blockage);
+
   void setCapacity(dbTechLayer* layer,
                    uint x_idx,
                    uint y_idx,
@@ -8697,6 +8745,13 @@ class dbGCellGrid : public dbObject
                 uint vertical,
                 uint up);
 
+  void setBlockage(dbTechLayer* layer,
+                   uint x_idx,
+                   uint y_idx,
+                   uint horizontal,
+                   uint vertical,
+                   uint up);
+
   void getCapacity(dbTechLayer* layer,
                    uint x_idx,
                    uint y_idx,
@@ -8710,6 +8765,13 @@ class dbGCellGrid : public dbObject
                 uint& horizontal,
                 uint& vertical,
                 uint& up) const;
+
+  void getBlockage(dbTechLayer* layer,
+                   uint x_idx,
+                   uint y_idx,
+                   uint& horizontal,
+                   uint& vertical,
+                   uint& up) const;
 
   void resetCongestionMap();
 

@@ -2026,7 +2026,7 @@ Resizer::repairSetup(float slack_margin)
         journalRestore();
         sta_->worstSlack(max_, worst_slack, worst_vertex);
         debugPrint(logger_, RSZ, "retime", 1,
-                   "decreasing slack for %d passes restoring worst_slack {}",
+                   "decreasing slack for {} passes restoring worst_slack {}",
                    repair_setup_decreasing_slack_passes_allowed_,
                    delayAsString(worst_slack, sta_, 3));
         break;
@@ -2988,6 +2988,35 @@ Resizer::bufferDelay(LibertyCell *buffer_cell,
   gateDelays(output, load_cap, dcalc_ap, gate_delays, slews);
   return max(gate_delays[RiseFall::riseIndex()],
              gate_delays[RiseFall::fallIndex()]);
+}
+
+// Self delay; buffer -> buffer
+float
+Resizer::bufferSelfDelay(LibertyCell *buffer_cell)
+{
+  const DcalcAnalysisPt *dcalc_ap = sta_->cmdCorner()->findDcalcAnalysisPt(max_);
+  LibertyPort *input, *output;
+  buffer_cell->bufferPorts(input, output);
+  ArcDelay gate_delays[RiseFall::index_count];
+  Slew slews[RiseFall::index_count];
+  float load_cap = input->capacitance();
+  gateDelays(output, load_cap, dcalc_ap, gate_delays, slews);
+  return max(gate_delays[RiseFall::riseIndex()],
+             gate_delays[RiseFall::fallIndex()]);
+}
+
+float
+Resizer::bufferSelfDelay(LibertyCell *buffer_cell,
+                         const RiseFall *rf)
+{
+  const DcalcAnalysisPt *dcalc_ap = sta_->cmdCorner()->findDcalcAnalysisPt(max_);
+  LibertyPort *input, *output;
+  buffer_cell->bufferPorts(input, output);
+  ArcDelay gate_delays[RiseFall::index_count];
+  Slew slews[RiseFall::index_count];
+  float load_cap = input->capacitance();
+  gateDelays(output, load_cap, dcalc_ap, gate_delays, slews);
+  return gate_delays[rf->index()];
 }
 
 // Rise/fall delays across all timing arcs into drvr_port.
