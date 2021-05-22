@@ -1,23 +1,21 @@
 #pragma once
 
-#include <fstream>
-#include <iomanip>
-#include <iostream>
 #include <map>
-#include <queue>
 #include <string>
-#include <vector>
-
-#include "db_sta/dbReadVerilog.hh"
-#include "opendb/db.h"
-#include "sta/Liberty.hh"
 
 namespace utl {
 class Logger;
 }
-
+namespace odb {
+class dbDatabase;
+class dbMaster;
+class dbModule;
+}
+namespace sta {
+class Instance;
+}
 namespace ord {
-
+class dbVerilogNetwork;
 //******************************************************
 //**** Utility Function:  Convert number to string
 //*****************************************************
@@ -85,7 +83,7 @@ class designBrowserKernel
   utl::Logger* logger_;
 
   int _level;
-  std::map<uint, ModuleData> module_info_;
+  std::map<uint, ModuleData> module_data_;
 
   void updateModuleInfo(odb::dbModule* mod);
 

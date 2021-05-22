@@ -18,41 +18,12 @@
 #include "utl/Logger.h"
 
 namespace ord {
-using ord::dbVerilogNetwork;
-
-using sta::Cell;
-using sta::Instance;
-using sta::InstanceChildIterator;
-using sta::InstancePinIterator;
-using sta::instanceVerilogName;
-using sta::LibertyCell;
-using sta::LibertyCellPortIterator;
-using sta::LibertyPort;
-using sta::Net;
-using sta::NetConnectedPinIterator;
-using sta::NetIterator;
-using sta::NetPinIterator;
-using sta::NetTermIterator;
-using sta::Pin;
-using sta::PinSeq;
-using sta::PortDirection;
-using sta::Term;
-
-using odb::dbDatabase;
-using odb::dbMaster;
-using odb::dbMTerm;
-using odb::dbSet;
-using odb::dbSigType;
-
-using std::cout;
 using std::endl;
 using std::fixed;
 using std::left;
-using std::map;
 using std::ofstream;
 using std::ostringstream;
 using std::pair;
-using std::queue;
 using std::right;
 using std::setprecision;
 using std::setw;
@@ -63,7 +34,7 @@ using std::to_string;
 using std::vector;
 
 // ***********************************************************
-// ***** Utility Function:   Convert number to string
+// ***** Utility Function: Convert double to string prec(2)
 // ***********************************************************
 string numberToString(double a)
 {
@@ -74,9 +45,17 @@ string numberToString(double a)
   string str = streamObj.str();
   return str;
 }
+// ***********************************************************
+// ***** Utility Function: Sorting comparison function
+// ***********************************************************
+template <class K, class V>
+bool cmpPair(pair<K, V>& a, pair<K, V>& b)
+{
+  return a.second < b.second;
+}
 
 // ***********************************************************
-// ***** Utility Function:   Reports
+// ***** Utility Functions:   Reports
 // ***********************************************************
 void printLogicalInfo(std::ofstream& file,
                       odb::dbModule* mod,
@@ -154,16 +133,11 @@ void printHierInfo(std::ofstream& file,
   }
 }
 
-template <class K, class V>
-bool cmpPair(pair<K, V>& a, pair<K, V>& b)
-{
-  return a.second < b.second;
-}
 
 // ************************************************************************
 // ************ Class designBrowserKernel
 // ************************************************************************
-void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
+void designBrowserKernel::createDBModule(sta::Instance* inst, odb::dbModule* parent)
 {
   sta::Cell* cell = _network->cell(inst);
   auto block = _db->getChip()->getBlock();
@@ -183,9 +157,9 @@ void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
                      _network->name(cell),
                      _network->name(inst));
   }
-  InstanceChildIterator* child_iter = _network->childIterator(inst);
+  sta::InstanceChildIterator* child_iter = _network->childIterator(inst);
   while (child_iter->hasNext()) {
-    Instance* child = child_iter->next();
+    sta::Instance* child = child_iter->next();
     if (_network->isHierarchical(child)) {
       createDBModule(child, mod);
     } else {
@@ -202,21 +176,13 @@ void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
                        _network->name(child),
                        mod->getName());
       mod->addInst(dbinst);
-      auto childCell = _network->cell(child);
-      auto libcell = _network->libertyCell(childCell);
-      // buf_inv_cell hack
-      if (libcell->isBuffer() || libcell->isInverter()) {
-        module_info_[mod->getId()].total_buf_inv_cells++;
-        module_info_[mod->getId()].total_buf_inv_cell_area
-            += area(dbinst->getMaster());
-      }
     }
   }
 
   int pin_count = 0;
-  InstancePinIterator* pin_iter = _network->pinIterator(inst);
+  sta::InstancePinIterator* pin_iter = _network->pinIterator(inst);
   while (pin_iter->hasNext()) {
-    Pin* pin = pin_iter->next();
+    sta::Pin* pin = pin_iter->next();
     pin_count++;
   }
   mod->setNumPins(pin_count);
@@ -226,11 +192,28 @@ void designBrowserKernel::createDBModule(Instance* inst, odb::dbModule* parent)
     mod->getInsts().reverse();
 }
 
+int getTermCount(sta::LibertyCell* libcell)
+{
+  int term_count = 0;
+  if(libcell == nullptr)
+    return 0;
+  sta::LibertyCellPortIterator port_iter(libcell); 
+  while(port_iter.hasNext())
+  {
+    sta::LibertyPort *port = port_iter.next();
+    term_count++;
+  }
+  return term_count;
+}
+
 void designBrowserKernel::updateModuleInfo(odb::dbModule* mod)
 {
-  ModuleData data = module_info_[mod->getId()];
+  ModuleData data;
   for (auto inst : mod->getInsts()) {
     auto master = inst->getMaster();
+    auto cell = _network->findAnyCell(master->getName().c_str());
+    auto libcell = _network->libertyCell(cell);
+    int term_count = getTermCount(libcell);
     double cellArea = area(master);
     if (master->isBlock()) {
       data.macros++;
@@ -238,29 +221,37 @@ void designBrowserKernel::updateModuleInfo(odb::dbModule* mod)
     } else {
       data.std_cell_area += cellArea;
       data.std_cells++;
-      if (master->isSequential()) {
+
+      if (libcell->isBuffer() || libcell->isInverter()) {
+        data.total_buf_inv_cells++;
+        data.total_buf_inv_cell_area
+            += cellArea;
+      }
+      
+      if(libcell->hasSequentials())
+      {
         data.total_seq_cells++;
         data.total_seq_cell_area += cellArea;
       } else {
         data.total_comb_cells++;
-        data.total_comb_cell_pins += master->getMTermCount();
+        data.total_comb_cell_pins += term_count;
         data.total_comb_cell_area += cellArea;
       }
     }
     data.total_macros = data.macros;
-    data.num_pins += master->getMTermCount();
+    data.num_pins += term_count;
     data.macros_map[master]++;
   }
   data.total_macro_area = data.macro_area;
   for (auto child : mod->getChildren()) {
     auto childMod = child->getMaster();
     uint cid = childMod->getId();
-    if (!module_info_[cid].valid)
+    if (!module_data_[cid].valid)
       updateModuleInfo(childMod);
-    data.appendData(module_info_[cid]);
+    data.appendData(module_data_[cid]);
   }
   data.valid = true;
-  module_info_[mod->getId()] = data;
+  module_data_[mod->getId()] = data;
 }
 
 //////////////////////////////////////////////////////////////////////////////
@@ -277,13 +268,13 @@ int designBrowserKernel::micronsToDbu(double dist) const
   return dist * dbu;
 }
 
-double designBrowserKernel::area(dbMaster* master)
+double designBrowserKernel::area(odb::dbMaster* master)
 {
   return dbuToMicrons(master->getWidth()) * dbuToMicrons(master->getHeight());
 }
 ////////////////////////////////////////////////////////////////////////////////
 
-void designBrowserKernel::linkDesignBrowserKernel(dbVerilogNetwork* network,
+void designBrowserKernel::linkDesignBrowserKernel(ord::dbVerilogNetwork* network,
                                                   dbDatabase* db)
 {
   init(network, db);
@@ -317,7 +308,7 @@ void designBrowserKernel::traverseDepthUtil(odb::dbModule* mod,
     return;
   }
   file << setw(10) << to_string(value++) + " |";
-  printHierInfo(file, mod, module_info_[mod->getId()]);
+  printHierInfo(file, mod, module_data_[mod->getId()]);
   file << endl;
   for (auto child : mod->getChildren()) {
     traverseDepthUtil(child->getMaster(), value, file);
@@ -335,11 +326,13 @@ void designBrowserKernel::traverseDesign(string name, ofstream& file)
 void designBrowserKernel::reportLogicAreaKeyTermCountUtil(odb::dbModule* mod,
                                                           ofstream& file)
 {
-  auto data = module_info_[mod->getId()];
+  auto data = module_data_[mod->getId()];
   vector<pair<odb::dbMaster*, uint>> sorted_cells;
-  for (auto macro : data.macros_map)
-    sorted_cells.push_back({macro.first, (uint) macro.first->getMTermCount()});
-
+  for (auto macro : data.macros_map) {
+    auto cell = _network->findAnyCell(macro.first->getName().c_str());
+    auto libcell = _network->libertyCell(cell);
+    sorted_cells.push_back({macro.first, (uint) getTermCount(libcell)});
+  }
   sort(sorted_cells.begin(), sorted_cells.end(), cmpPair<odb::dbMaster*, uint>);
   for (auto cell : sorted_cells) {
     auto master = cell.first;
@@ -355,7 +348,7 @@ void designBrowserKernel::reportLogicAreaKeyTermCountUtil(odb::dbModule* mod,
 void designBrowserKernel::reportLogicAreaKeyCellCountUtil(odb::dbModule* mod,
                                                           ofstream& file)
 {
-  auto data = module_info_[mod->getId()];
+  auto data = module_data_[mod->getId()];
   vector<pair<odb::dbMaster*, uint>> sorted_cells;
   for (auto macro : data.macros_map)
     sorted_cells.push_back(macro);
@@ -363,7 +356,9 @@ void designBrowserKernel::reportLogicAreaKeyCellCountUtil(odb::dbModule* mod,
   sort(sorted_cells.begin(), sorted_cells.end(), cmpPair<odb::dbMaster*, uint>);
   for (auto cell : sorted_cells) {
     auto master = cell.first;
-    int term_count = master->getMTermCount();
+    auto stacell = _network->findAnyCell(master->getName().c_str());
+    auto libcell = _network->libertyCell(stacell);
+    int term_count = getTermCount(libcell);;
     float cell_area = area(master);
     int cell_count = cell.second;
     file << left << setw(40) << master->getName() << setw(20) << term_count
@@ -383,7 +378,7 @@ void designBrowserKernel::reportDesignFileUtil(odb::dbModule* mod,
   file << "\"instance_name\" : \"" << mod->getModInst()->getHierarchalName()
        << "\"," << endl;
   file << "\"module\" : {" << endl;
-  printLogicalInfo(file, mod, level, module_info_[mod->getId()]);
+  printLogicalInfo(file, mod, level, module_data_[mod->getId()]);
   file << "\"module_instances\" : [" << endl;
   size_t i = 0;
   uint childrenSz = mod->getChildren().size();
@@ -408,7 +403,7 @@ void designBrowserKernel::reportLogicArea(string name,
   auto mod = _db->getChip()->getBlock()->findModule(name.c_str());
   if (mod == nullptr)
     logger_->error(utl::DBR, 5, "Could not find module {}", name);
-  printAreaInfo(file, mod, module_info_[mod->getId()]);
+  printAreaInfo(file, mod, module_data_[mod->getId()]);
 
   if (detailed) {
     file << endl;
@@ -422,8 +417,8 @@ void designBrowserKernel::reportLogicArea(string name,
       reportLogicAreaKeyTermCountUtil(mod, file);
     }
     file << "The average pins of combinational cell is  "
-         << module_info_[mod->getId()].total_comb_cell_pins * 1.0
-                / module_info_[mod->getId()].total_comb_cells
+         << module_data_[mod->getId()].total_comb_cell_pins * 1.0
+                / module_data_[mod->getId()].total_comb_cells
          << endl;
   }
 }
@@ -441,7 +436,7 @@ void designBrowserKernel::reportDesignFile(ofstream& file)
   file << "{" << endl;
   file << "\"logical_hierarchy\" : {" << endl;
   auto mod = _db->getChip()->getBlock()->getTopModule();
-  printLogicalInfo(file, mod, 0, module_info_[mod->getId()]);
+  printLogicalInfo(file, mod, 0, module_data_[mod->getId()]);
   file << "\"module_instances\" : [" << endl;
   uint childrenSz = mod->getChildren().size();
   if (childrenSz > 0) {
@@ -472,8 +467,8 @@ void deleteDesignBrowser(designBrowserKernel* browser)
 }
 
 void dbLinkDesignBrowser(designBrowserKernel* browser,
-                         dbVerilogNetwork* network,
-                         dbDatabase* db)
+                         ord::dbVerilogNetwork* network,
+                         odb::dbDatabase* db)
 {
   browser->linkDesignBrowserKernel(network, db);
 }
