@@ -585,7 +585,7 @@ BOOST_DATA_TEST_CASE(eol_ext_paronly, (bdata::make({true, false})), parOnly)
   frNet* n1 = makeNet("n1");
 
   makePathseg(n1, 2, {0, 100}, {500, 100});
-  makePathseg(n1, 2, {520, 290}, {910, 290});
+  makePathseg(n1, 2, {600, 290}, {1000, 290});
 
   runGC();
 
@@ -598,7 +598,7 @@ BOOST_DATA_TEST_CASE(eol_ext_paronly, (bdata::make({true, false})), parOnly)
     testMarker(markers[0].get(),
                2,
                frConstraintTypeEnum::frcLef58EolExtensionConstraint,
-               frBox(500, 150, 520, 240));
+               frBox(500, 150, 600, 240));
   }
 }
 

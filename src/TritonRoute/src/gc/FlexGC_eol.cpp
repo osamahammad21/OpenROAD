@@ -32,6 +32,9 @@
 
 using namespace std;
 using namespace fr;
+#define DEBUG_RECT(rect, id) \
+logger_->info(utl::DRT, id, "({},{}), ({},{})", gtl::xl(rect), gtl::yl(rect), gtl::xh(rect), gtl::yh(rect));
+
 bool FlexGCWorker::Impl::checkMetalEndOfLine_eol_isEolEdge(
     gcSegment* edge,
     frConstraint* constraint)
@@ -745,7 +748,7 @@ void FlexGCWorker::Impl::checkMetalEndOfLine_ext_helper(
         && (int) edge1->getDir() + (int) edge2->getDir() != OPPOSITEDIR)
       return;
   }
-  if (!segIntersect(rect2, queryRect))
+  if (!gtl::intersect(rect2, queryRect, false))
     return;
   if ((frSquaredDistance) gtl::square_euclidean_distance(rect1, rect2)
       >= reqDistSqr)
@@ -754,6 +757,7 @@ void FlexGCWorker::Impl::checkMetalEndOfLine_ext_helper(
   gtl::rectangle_data<frCoord> edgeRect;
   gtl::set_points(edgeRect, edge1->low(), edge1->high());
   gtl::generalized_intersect(markerRect, edgeRect);
+  DEBUG_RECT(markerRect, 19);
   auto marker = make_unique<frMarker>();
   frBox box(gtl::xl(markerRect),
             gtl::yl(markerRect),
@@ -807,7 +811,8 @@ void FlexGCWorker::Impl::checkMetalEndOfLine_ext(
                                       .findMax(),  // edge might have extension
                             queryBox,
                             queryRect);
-
+  DEBUG_RECT(queryRect, 3);
+  DEBUG_RECT(extRect, 15);
   vector<pair<segment_t, gcSegment*>> results;
   auto& workerRegionQuery = getWorkerRegionQuery();
   workerRegionQuery.queryPolygonEdge(queryBox, layerNum, results);
@@ -820,6 +825,7 @@ void FlexGCWorker::Impl::checkMetalEndOfLine_main(gcPin* pin)
 {
   auto poly = pin->getPolygon();
   auto layerNum = poly->getLayerNum();
+  DEBUG_RECT(*pin->getMaxRectangles()[0], 1);
   auto& cons = design_->getTech()->getLayer(layerNum)->getEolSpacing();
   auto lef58Cons = design_->getTech()
                        ->getLayer(layerNum)
