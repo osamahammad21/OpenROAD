@@ -569,7 +569,10 @@ void GlobalRouter::updateDirtyNets()
 {
   initRoutingLayers();
   for (odb::dbNet* db_net : _dirtyNets) {
+    if(_db_net_map.find(db_net) == _db_net_map.end())
+      _logger->error(utl::GRT, 281, "Net {} not found in updateDirtyNets", db_net->getName());
     Net* net = _db_net_map[db_net];
+
     net->destroyPins();
     makeItermPins(net, db_net, _grid->getGridArea());
     makeBtermPins(net, db_net, _grid->getGridArea());
