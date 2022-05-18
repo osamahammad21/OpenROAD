@@ -97,7 +97,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         unique_ptr<frShape> uShape(std::move(uPathSeg));
         auto sptr = uShape.get();
         net->addShape(std::move(uShape));
-        regionQuery->addDRObj(sptr);
+        regionQuery->addDRObj(sptr, rq_commit_);
         // add cutSegs
         auto lNum = sptr->getLayerNum();
 
@@ -129,7 +129,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         unique_ptr<frShape> uShape(std::move(uPathSeg));
         auto sptr = uShape.get();
         net->addShape(std::move(uShape));
-        regionQuery->addDRObj(sptr);
+        regionQuery->addDRObj(sptr, rq_commit_);
         // add cutSegs
         auto lNum = sptr->getLayerNum();
 
@@ -144,7 +144,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         update.setOrderInOwner(pathSeg->getOrderInOwner());
         design_->addUpdate(update);
       }
-      regionQuery->removeDRObj(pathSeg);  // delete rq
+      regionQuery->removeDRObj(pathSeg, rq_commit_);  // delete rq
       net->removeShape(pathSeg);          // delete segment
     }
     // horizontal seg
@@ -183,7 +183,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         unique_ptr<frShape> uShape(std::move(uPathSeg));
         auto sptr = uShape.get();
         net->addShape(std::move(uShape));
-        regionQuery->addDRObj(sptr);
+        regionQuery->addDRObj(sptr, rq_commit_);
         // add cutSegs
         auto lNum = sptr->getLayerNum();
 
@@ -215,7 +215,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         unique_ptr<frShape> uShape(std::move(uPathSeg));
         auto sptr = uShape.get();
         net->addShape(std::move(uShape));
-        regionQuery->addDRObj(sptr);
+        regionQuery->addDRObj(sptr, rq_commit_);
         // add cutSegs
         auto lNum = sptr->getLayerNum();
 
@@ -230,7 +230,7 @@ void FlexDRWorker::endRemoveNets_pathSeg(frDesign* design,
         update.setOrderInOwner(pathSeg->getOrderInOwner());
         design_->addUpdate(update);
       }
-      regionQuery->removeDRObj(pathSeg);  // delete rq
+      regionQuery->removeDRObj(pathSeg, rq_commit_);  // delete rq
       net->removeShape(pathSeg);          // delete segment
     }
   }
@@ -257,7 +257,7 @@ void FlexDRWorker::endRemoveNets_via(frDesign* design, frVia* via)
       update.setOrderInOwner(via->getOrderInOwner());
       design_->addUpdate(update);
     }
-    regionQuery->removeDRObj(via);  // delete rq
+    regionQuery->removeDRObj(via, rq_commit_);  // delete rq
     net->removeVia(via);
   }
 }
@@ -282,7 +282,7 @@ void FlexDRWorker::endRemoveNets_patchWire(frDesign* design, frPatchWire* pwire)
       update.setOrderInOwner(pwire->getOrderInOwner());
       design_->addUpdate(update);
     }
-    regionQuery->removeDRObj(pwire);  // delete rq
+    regionQuery->removeDRObj(pwire, rq_commit_);  // delete rq
     net->removePatchWire(pwire);
   }
 }
@@ -334,7 +334,7 @@ void FlexDRWorker::endAddNets_pathSeg(frDesign* design, drPathSeg* pathSeg)
   unique_ptr<frShape> uShape = make_unique<frPathSeg>(*pathSeg);
   auto rptr = uShape.get();
   net->addShape(std::move(uShape));
-  design->getRegionQuery()->addDRObj(rptr);
+  design->getRegionQuery()->addDRObj(rptr, rq_commit_);
   if (save_updates_) {
     drUpdate update(drUpdate::ADD_SHAPE);
     update.setNet(net);
@@ -349,7 +349,7 @@ void FlexDRWorker::endAddNets_via(frDesign* design, drVia* via)
   unique_ptr<frVia> uVia = make_unique<frVia>(*via);
   auto rptr = uVia.get();
   net->addVia(std::move(uVia));
-  design->getRegionQuery()->addDRObj(rptr);
+  design->getRegionQuery()->addDRObj(rptr, rq_commit_);
   if (save_updates_) {
     drUpdate update(drUpdate::ADD_SHAPE);
     update.setNet(net);
@@ -364,7 +364,7 @@ void FlexDRWorker::endAddNets_patchWire(frDesign* design, drPatchWire* pwire)
   unique_ptr<frShape> uShape = make_unique<frPatchWire>(*pwire);
   auto rptr = uShape.get();
   net->addPatchWire(std::move(uShape));
-  design->getRegionQuery()->addDRObj(rptr);
+  design->getRegionQuery()->addDRObj(rptr, rq_commit_);
   if (save_updates_) {
     drUpdate update(drUpdate::ADD_SHAPE);
     update.setNet(net);
@@ -479,8 +479,8 @@ void FlexDRWorker::endAddNets_merge(frDesign* design,
         design_->addUpdate(update1);
         design_->addUpdate(update2);
       }
-      regionQuery->removeDRObj(horzPathSegs[0]);
-      regionQuery->removeDRObj(horzPathSegs[1]);
+      regionQuery->removeDRObj(horzPathSegs[0], rq_commit_);
+      regionQuery->removeDRObj(horzPathSegs[1], rq_commit_);
       net->removeShape(horzPathSegs[0]);
       net->removeShape(horzPathSegs[1]);
       if (save_updates_) {
@@ -490,7 +490,7 @@ void FlexDRWorker::endAddNets_merge(frDesign* design,
         design_->addUpdate(update3);
       }
       net->addShape(std::move(uShape));
-      regionQuery->addDRObj(rptr);
+      regionQuery->addDRObj(rptr, rq_commit_);
     }
     if ((int) vertPathSegs.size() == 2 && horzPathSegs.empty() && !hasPatchMetal
         && vertPathSegs[0]->isTapered() == vertPathSegs[1]->isTapered()) {
@@ -522,8 +522,8 @@ void FlexDRWorker::endAddNets_merge(frDesign* design,
         design_->addUpdate(update1);
         design_->addUpdate(update2);
       }
-      regionQuery->removeDRObj(vertPathSegs[0]);
-      regionQuery->removeDRObj(vertPathSegs[1]);
+      regionQuery->removeDRObj(vertPathSegs[0], rq_commit_);
+      regionQuery->removeDRObj(vertPathSegs[1], rq_commit_);
       net->removeShape(vertPathSegs[0]);
       net->removeShape(vertPathSegs[1]);
       if (save_updates_) {
@@ -533,7 +533,7 @@ void FlexDRWorker::endAddNets_merge(frDesign* design,
         design_->addUpdate(update3);
       }
       net->addShape(std::move(uShape));
-      regionQuery->addDRObj(rptr);
+      regionQuery->addDRObj(rptr, rq_commit_);
     }
   }
 }

@@ -64,8 +64,8 @@ class frRegionQuery
   frDesign* getDesign() const;
 
   // setters
-  void addDRObj(frShape* in);
-  void addDRObj(frVia* in);
+  void addDRObj(frShape* in, bool commit = true);
+  void addDRObj(frVia* in, bool commit = true);
   void addMarker(frMarker* in);
   void addGRObj(grShape* in);
   void addGRObj(grVia* in);
@@ -113,8 +113,8 @@ class frRegionQuery
   void dummyUpdate();
 
   void clearGuides();
-  void removeDRObj(frShape* in);
-  void removeDRObj(frVia* in);
+  void removeDRObj(frShape* in, bool commit = true);
+  void removeDRObj(frVia* in, bool commit = true);
   void removeGRObj(grShape* in);
   void removeGRObj(grVia* in);
   void removeMarker(frMarker* in);

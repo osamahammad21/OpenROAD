@@ -327,7 +327,8 @@ class FlexDRWorker
         gcWorker_(nullptr),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        rq_commit_(false)
   {
   }
   FlexDRWorker()
@@ -341,7 +342,8 @@ class FlexDRWorker
         gcWorker_(nullptr),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        rq_commit_(false)
   {
   }
   // setters
@@ -567,6 +569,7 @@ class FlexDRWorker
   bool dist_on_;
   bool isCongested_;
   bool save_updates_;
+  bool rq_commit_;
 
   // init
   void init(const frDesign* design);

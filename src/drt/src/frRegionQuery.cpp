@@ -62,8 +62,11 @@ struct frRegionQuery::Impl
   // only for dr objs, via only in via layer
   RTreesByLayer<frBlockObject*> drObjs_;
   RTreesByLayer<frMarker*> markers_;  // use init()
+  ObjectsByLayer<frBlockObject> to_be_removed_; 
+  ObjectsByLayer<frBlockObject> to_be_added_; 
+  bool valid_;
 
-  Impl() = default;
+  Impl() : valid_(true) {}
   void init();
   void initOrigGuide(map<frNet*, vector<frRect>, frBlockObjectComp>& tmpGuides);
   void initGuide();
@@ -89,6 +92,9 @@ struct frRegionQuery::Impl
   void addGRObj(grVia* in, ObjectsByLayer<grBlockObject>& allShapes);
   void addGRObj(grShape* in);
   void addGRObj(grVia* in);
+  void addTmpDRObj(frLayerNum lNum, Rect frb, frBlockObject* obj);
+  void removeTmpDRObj(frLayerNum lNum, Rect frb, frBlockObject* obj);
+  void updateDRObjs();
   template <class T>
   static inline void updateRTree(RTree<T>& tree)
   {
@@ -166,13 +172,17 @@ void frRegionQuery::Impl::add(frShape* shape,
   }
 }
 
-void frRegionQuery::addDRObj(frShape* shape)
+void frRegionQuery::addDRObj(frShape* shape, bool commit)
 {
   Rect frb;
   if (shape->typeId() == frcPathSeg || shape->typeId() == frcRect
       || shape->typeId() == frcPatchWire) {
     shape->getBBox(frb);
-    impl_->drObjs_.at(shape->getLayerNum()).insert(make_pair(frb, shape));
+    auto lNum = shape->getLayerNum();
+    if(commit)
+      impl_->drObjs_.at(lNum).insert(make_pair(frb, shape));
+    else
+      impl_->addTmpDRObj(lNum, frb, shape);
   } else {
     impl_->logger_->error(DRT, 6, "Unsupported region query add.");
   }
@@ -197,14 +207,32 @@ void frRegionQuery::Impl::addDRObj(frShape* shape,
     logger_->error(DRT, 7, "Unsupported region query add.");
   }
 }
+void frRegionQuery::Impl::addTmpDRObj(frLayerNum lNum, Rect frb, frBlockObject* obj)
+{
+  if(to_be_added_.size() <= lNum)
+    to_be_added_.resize(lNum+1);
+  to_be_added_[lNum].push_back({frb, obj});
+  valid_ = false;
+}
+void frRegionQuery::Impl::removeTmpDRObj(frLayerNum lNum, Rect frb, frBlockObject* obj)
+{
+  if(to_be_removed_.size() <= lNum)
+    to_be_removed_.resize(lNum+1);
+  to_be_removed_[lNum].push_back({frb, obj});
+  valid_ = false;
+}
 
-void frRegionQuery::removeDRObj(frShape* shape)
+void frRegionQuery::removeDRObj(frShape* shape, bool commit)
 {
   Rect frb;
   if (shape->typeId() == frcPathSeg || shape->typeId() == frcRect
       || shape->typeId() == frcPatchWire) {
     shape->getBBox(frb);
-    impl_->drObjs_.at(shape->getLayerNum()).remove(make_pair(frb, shape));
+    auto lNum = shape->getLayerNum();
+    if(commit)
+      impl_->drObjs_.at(lNum).remove(make_pair(frb, shape));
+    else
+      impl_->removeTmpDRObj(lNum, frb, shape);
   } else {
     impl_->logger_->error(DRT, 31, "Unsupported region query add.");
   }
@@ -466,12 +494,15 @@ void frRegionQuery::Impl::add(frVia* via,
   }
 }
 
-void frRegionQuery::addDRObj(frVia* via)
+void frRegionQuery::addDRObj(frVia* via, bool commit)
 {
   Rect frb;
   via->getBBox(frb);
-  impl_->drObjs_.at(via->getViaDef()->getCutLayerNum())
-      .insert(make_pair(frb, via));
+  auto lNum = via->getViaDef()->getCutLayerNum();
+  if(commit)
+    impl_->drObjs_.at(lNum).insert(make_pair(frb, via));
+  else
+    impl_->addTmpDRObj(lNum, frb, via);
 }
 
 void frRegionQuery::Impl::addDRObj(frVia* via,
@@ -483,12 +514,15 @@ void frRegionQuery::Impl::addDRObj(frVia* via,
       .push_back(make_pair(frb, via));
 }
 
-void frRegionQuery::removeDRObj(frVia* via)
+void frRegionQuery::removeDRObj(frVia* via, bool commit)
 {
   Rect frb;
   via->getBBox(frb);
-  impl_->drObjs_.at(via->getViaDef()->getCutLayerNum())
-      .remove(make_pair(frb, via));
+  frLayerNum lNum = via->getViaDef()->getCutLayerNum();
+  if(commit)
+    impl_->drObjs_.at(lNum).remove(make_pair(frb, via));
+  else
+    impl_->removeTmpDRObj(lNum, frb, via);
 }
 
 void frRegionQuery::addGRObj(grVia* via)
@@ -703,11 +737,34 @@ void frRegionQuery::queryGRPin(const Rect& box,
     return kv.second;
   });
 }
+void frRegionQuery::Impl::updateDRObjs()
+{
+  if(valid_)
+    return;
+  for(int i = 0; i < to_be_added_.size(); i++)
+  {
+    if(to_be_added_[i].empty())
+      continue;
+    drObjs_[i].insert(to_be_added_[i].begin(), to_be_added_[i].end());
+  }
+  to_be_added_.clear();
+  to_be_added_.shrink_to_fit();
 
+  for(int i = 0; i < to_be_removed_.size(); i++)
+  {
+    if(to_be_removed_[i].empty())
+      continue;
+    drObjs_[i].remove(to_be_removed_[i].begin(), to_be_removed_[i].end());
+  }
+  to_be_removed_.clear();
+  to_be_removed_.shrink_to_fit();
+  valid_ = true;
+}
 void frRegionQuery::queryDRObj(const box_t& boostb,
                                const frLayerNum layerNum,
                                Objects<frBlockObject>& result) const
 {
+  impl_->updateDRObjs();
   impl_->drObjs_.at(layerNum).query(bgi::intersects(boostb),
                                     back_inserter(result));
 }
@@ -716,6 +773,7 @@ void frRegionQuery::queryDRObj(const Rect& box,
                                const frLayerNum layerNum,
                                Objects<frBlockObject>& result) const
 {
+  impl_->updateDRObjs();
   impl_->drObjs_.at(layerNum).query(bgi::intersects(box),
                                     back_inserter(result));
 }
@@ -724,6 +782,7 @@ void frRegionQuery::queryDRObj(const Rect& box,
                                const frLayerNum layerNum,
                                vector<frBlockObject*>& result) const
 {
+  impl_->updateDRObjs();
   Objects<frBlockObject> temp;
   impl_->drObjs_.at(layerNum).query(bgi::intersects(box), back_inserter(temp));
   transform(temp.begin(), temp.end(), back_inserter(result), [](auto& kv) {
@@ -734,6 +793,7 @@ void frRegionQuery::queryDRObj(const Rect& box,
 void frRegionQuery::queryDRObj(const Rect& box,
                                vector<frBlockObject*>& result) const
 {
+  impl_->updateDRObjs();
   Objects<frBlockObject> temp;
   for (auto& m : impl_->drObjs_) {
     m.query(bgi::intersects(box), back_inserter(temp));
