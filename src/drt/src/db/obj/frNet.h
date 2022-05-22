@@ -39,6 +39,7 @@
 #include "db/obj/frVia.h"
 #include "frBaseTypes.h"
 #include "global.h"
+#include <shared_mutex>
 
 namespace fr {
 class frInstTerm;
@@ -119,6 +120,7 @@ class frNet : public frBlockObject
   void setName(const frString& stringIn) { name_ = stringIn; }
   void addShape(std::unique_ptr<frShape> in)
   {
+    std::unique_lock lock(shapes_mtx_);
     in->addToNet(this);
     auto rptr = in.get();
     shapes_.push_back(std::move(in));
@@ -126,6 +128,7 @@ class frNet : public frBlockObject
   }
   void addVia(std::unique_ptr<frVia> in)
   {
+    std::unique_lock lock(vias_mtx_);
     in->addToNet(this);
     auto rptr = in.get();
     vias_.push_back(std::move(in));
@@ -133,6 +136,7 @@ class frNet : public frBlockObject
   }
   void addPatchWire(std::unique_ptr<frShape> in)
   {
+    std::unique_lock lock(pwires_mtx_);
     in->addToNet(this);
     auto rptr = in.get();
     pwires_.push_back(std::move(in));
@@ -179,9 +183,18 @@ class frNet : public frBlockObject
     guides_.push_back(std::move(in));
   }
   void clearGuides() { guides_.clear(); }
-  void removeShape(frShape* in) { shapes_.erase(in->getIter()); }
-  void removeVia(frVia* in) { vias_.erase(in->getIter()); }
-  void removePatchWire(frShape* in) { pwires_.erase(in->getIter()); }
+  void removeShape(frShape* in) {
+    std::unique_lock lock(shapes_mtx_);
+    shapes_.erase(in->getIter());
+  }
+  void removeVia(frVia* in) {
+    std::unique_lock lock(vias_mtx_);
+    vias_.erase(in->getIter());
+  }
+  void removePatchWire(frShape* in) {
+    std::unique_lock lock(pwires_mtx_);
+    pwires_.erase(in->getIter());
+  }
   void removeGRShape(grShape* in) { grShapes_.erase(in->getIter()); }
   void clearGRShapes() { grShapes_.clear(); }
   void removeGRVia(grVia* in) { grVias_.erase(in->getIter()); }
@@ -247,6 +260,10 @@ class frNet : public frBlockObject
                        // ordering before other criteria
   bool isClock_;
   bool isSpecial_;
+
+  mutable std::shared_mutex shapes_mtx_;
+  mutable std::shared_mutex vias_mtx_;
+  mutable std::shared_mutex pwires_mtx_;
 
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version);

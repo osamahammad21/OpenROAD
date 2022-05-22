@@ -30,6 +30,7 @@
 
 #include <boost/polygon/polygon.hpp>
 #include <iostream>
+#include <shared_mutex>
 
 #include "frDesign.h"
 #include "frRTree.h"
@@ -61,6 +62,11 @@ struct frRegionQuery::Impl
   // only for dr objs, via only in via layer
   RTreesByLayer<frBlockObject*> drObjs_;
   RTreesByLayer<frMarker*> markers_;  // use init()
+
+  //drObjs mutex
+  frCollection<std::unique_ptr<std::shared_mutex>> dr_mutex_;
+  //markers mutex
+  frCollection<std::unique_ptr<std::shared_mutex>> markers_mutex_;
 
   Impl() = default;
   void init();
@@ -140,6 +146,7 @@ void frRegionQuery::addDRObj(frShape* shape)
   if (shape->typeId() == frcPathSeg || shape->typeId() == frcRect
       || shape->typeId() == frcPatchWire) {
     shape->getBBox(frb);
+    std::unique_lock lock(*impl_->dr_mutex_.at(shape->getLayerNum()));
     impl_->drObjs_.at(shape->getLayerNum()).insert(make_pair(frb, shape));
   } else {
     impl_->logger_->error(DRT, 6, "Unsupported region query add.");
@@ -150,6 +157,7 @@ void frRegionQuery::addMarker(frMarker* in)
 {
   Rect frb;
   in->getBBox(frb);
+  std::unique_lock lock(*impl_->markers_mutex_[in->getLayerNum()]);
   impl_->markers_.at(in->getLayerNum()).insert(make_pair(frb, in));
 }
 
@@ -172,6 +180,7 @@ void frRegionQuery::removeDRObj(frShape* shape)
   if (shape->typeId() == frcPathSeg || shape->typeId() == frcRect
       || shape->typeId() == frcPatchWire) {
     shape->getBBox(frb);
+    std::unique_lock lock(*impl_->dr_mutex_.at(shape->getLayerNum()));
     impl_->drObjs_.at(shape->getLayerNum()).remove(make_pair(frb, shape));
   } else {
     impl_->logger_->error(DRT, 31, "Unsupported region query add.");
@@ -388,6 +397,7 @@ void frRegionQuery::removeMarker(frMarker* in)
 {
   Rect frb;
   in->getBBox(frb);
+  std::unique_lock lock(*impl_->markers_mutex_[in->getLayerNum()]);
   impl_->markers_.at(in->getLayerNum()).remove(make_pair(frb, in));
 }
 
@@ -438,6 +448,7 @@ void frRegionQuery::addDRObj(frVia* via)
 {
   Rect frb;
   via->getBBox(frb);
+  std::unique_lock lock(*impl_->dr_mutex_.at(via->getViaDef()->getCutLayerNum()));
   impl_->drObjs_.at(via->getViaDef()->getCutLayerNum())
       .insert(make_pair(frb, via));
 }
@@ -455,6 +466,7 @@ void frRegionQuery::removeDRObj(frVia* via)
 {
   Rect frb;
   via->getBBox(frb);
+  std::unique_lock lock(*impl_->dr_mutex_.at(via->getViaDef()->getCutLayerNum()));
   impl_->drObjs_.at(via->getViaDef()->getCutLayerNum())
       .remove(make_pair(frb, via));
 }
@@ -676,6 +688,7 @@ void frRegionQuery::queryDRObj(const box_t& boostb,
                                const frLayerNum layerNum,
                                Objects<frBlockObject>& result) const
 {
+  std::shared_lock lock(*impl_->dr_mutex_.at(layerNum));
   impl_->drObjs_.at(layerNum).query(bgi::intersects(boostb),
                                     back_inserter(result));
 }
@@ -684,6 +697,7 @@ void frRegionQuery::queryDRObj(const Rect& box,
                                const frLayerNum layerNum,
                                Objects<frBlockObject>& result) const
 {
+  std::shared_lock lock(*impl_->dr_mutex_.at(layerNum));
   impl_->drObjs_.at(layerNum).query(bgi::intersects(box),
                                     back_inserter(result));
 }
@@ -692,6 +706,7 @@ void frRegionQuery::queryDRObj(const Rect& box,
                                const frLayerNum layerNum,
                                vector<frBlockObject*>& result) const
 {
+  std::shared_lock lock(*impl_->dr_mutex_.at(layerNum));
   Objects<frBlockObject> temp;
   impl_->drObjs_.at(layerNum).query(bgi::intersects(box), back_inserter(temp));
   transform(temp.begin(), temp.end(), back_inserter(result), [](auto& kv) {
@@ -703,7 +718,9 @@ void frRegionQuery::queryDRObj(const Rect& box,
                                vector<frBlockObject*>& result) const
 {
   Objects<frBlockObject> temp;
+  frLayerNum lNum = 0;
   for (auto& m : impl_->drObjs_) {
+    std::shared_lock lock(*impl_->dr_mutex_.at(lNum++));
     m.query(bgi::intersects(box), back_inserter(temp));
   }
   transform(temp.begin(), temp.end(), back_inserter(result), [](auto& kv) {
@@ -728,6 +745,7 @@ void frRegionQuery::queryMarker(const Rect& box,
                                 vector<frMarker*>& result) const
 {
   Objects<frMarker> temp;
+  std::shared_lock lock(*impl_->markers_mutex_[layerNum]);
   impl_->markers_.at(layerNum).query(bgi::intersects(box), back_inserter(temp));
   transform(temp.begin(), temp.end(), back_inserter(result), [](auto& kv) {
     return kv.second;
@@ -738,7 +756,9 @@ void frRegionQuery::queryMarker(const Rect& box,
                                 vector<frMarker*>& result) const
 {
   Objects<frMarker> temp;
+  frLayerNum layerNum = 0;
   for (auto& m : impl_->markers_) {
+    std::shared_lock lock(*impl_->markers_mutex_[layerNum]);
     m.query(bgi::intersects(box), back_inserter(temp));
   }
   transform(temp.begin(), temp.end(), back_inserter(result), [](auto& kv) {
@@ -759,6 +779,11 @@ void frRegionQuery::Impl::init()
 
   markers_.clear();
   markers_.resize(numLayers);
+  for(int i = 0; i < numLayers; i++)
+  {
+    auto umtx = make_unique<std::shared_mutex>();
+    markers_mutex_.push_back(std::move(umtx));
+  }
 
   ObjectsByLayer<frBlockObject> allShapes(numLayers);
 
@@ -983,6 +1008,11 @@ void frRegionQuery::Impl::initDRObj()
   drObjs_.clear();
   drObjs_.shrink_to_fit();
   drObjs_.resize(numLayers);
+  for(int i = 0; i < numLayers; i++)
+  {
+    auto umtx = make_unique<std::shared_mutex>();
+    dr_mutex_.push_back(std::move(umtx));
+  }
 
   ObjectsByLayer<frBlockObject> allShapes(numLayers);
 

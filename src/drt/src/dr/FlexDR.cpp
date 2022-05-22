@@ -1841,6 +1841,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
       {
         ProfileTask profile("DR:end_batch");
         // single thread
+        #pragma omp parallel for schedule(dynamic)
         for (int i = 0; i < (int) workersInBatch.size(); i++) {
           workersInBatch[i]->end(getDesign());
           if (workersInBatch[i]->isCongested())
