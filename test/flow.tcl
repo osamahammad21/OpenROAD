@@ -207,11 +207,13 @@ write_verilog -remove_cells $filler_cells $verilog_file
 # Detailed routing
 
 set_thread_count [exec getconf _NPROCESSORS_ONLN]
+detailed_route_debug -iter 7 -worker " 1116360 629680 " -dump_dr -dump_dir results/aes_debug
 detailed_route -output_drc [make_result_file "${design}_${platform}_route_drc.rpt"] \
                -output_maze [make_result_file "${design}_${platform}_maze.log"] \
                -no_pin_access \
                -save_guide_updates \
-               -verbose 0
+               -droute_end_iter 7 \
+               -verbose 1
 
 write_guides [make_result_file "${design}_${platform}_output_guide.mod"]
 set drv_count [detailed_route_num_drvs]

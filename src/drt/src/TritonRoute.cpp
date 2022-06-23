@@ -198,6 +198,30 @@ std::string TritonRoute::runDRWorker(const std::string& workerStr,
   std::string result = worker->reloadedMain();
   return result;
 }
+static std::vector<FlexDR::SearchRepairArgs> strategy()
+{
+  const fr::frUInt4 shapeCost = ROUTESHAPECOST;
+
+  return {/*  0 */ {7, 0, 3, shapeCost, 0 /*MARKERCOST*/, 1, true},
+          /*  1 */ {7, -2, 3, shapeCost, shapeCost, 1, true},
+          /* added */ {7, -2, 32, shapeCost, 0, 1, true},
+          /*  3 */ {7, 0, 8, shapeCost, MARKERCOST, 0, false},
+          /* 16 */ {7, -6, 8, shapeCost * 2, MARKERCOST, 0, false},
+          /* added */ {7, -6, 16, shapeCost * 2, MARKERCOST, 0, false},
+          /* added */ {7, -6, 32, shapeCost * 2, MARKERCOST, 0, false},
+          /* added */ {7, -6, 3, shapeCost * 2, MARKERCOST, 0, false},
+          /* 24 */ {7, -6, 8, shapeCost * 4, MARKERCOST, 0, false},
+          /* 32 */ {7, -6, 8, shapeCost * 8, MARKERCOST * 2, 0, false},
+          /* added */ {7, -6, 3, shapeCost * 8, MARKERCOST * 2, 0, false},
+          /* added */ {7, -6, 16, shapeCost * 8, MARKERCOST * 2, 0, false},
+          /* added */ {7, -6, 32, shapeCost * 8, MARKERCOST * 2, 0, false},
+          /* 40 */ {7, -6, 8, shapeCost * 16, MARKERCOST * 4, 0, false},
+          /* 48 */ {7, -6, 16, shapeCost * 16, MARKERCOST * 4, 0, false},
+          /* added */ {7, -6, 32, shapeCost * 16, MARKERCOST * 4, 0, false},
+          /* 56 */ {7, -6, 32, shapeCost * 32, MARKERCOST * 8, 0, false},
+          /* 57 */ {3, -1, 8, shapeCost, MARKERCOST, 1, false},
+          /* 63 */ {7, -6, 64, shapeCost * 64, MARKERCOST * 16, 0, false}};
+}
 
 void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                                     const std::string& drcRpt)
@@ -218,34 +242,137 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
                         std::istreambuf_iterator<char>());
   workerFile.close();
-  auto worker
-      = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
-  if (debug_->mazeEndIter != -1)
-    worker->setMazeEndIter(debug_->mazeEndIter);
-  if (debug_->markerCost != -1)
-    worker->setMarkerCost(debug_->markerCost);
-  if (debug_->drcCost != -1)
-    worker->setDrcCost(debug_->drcCost);
-  if (debug_->ripupMode != -1)
-    worker->setRipupMode(debug_->ripupMode);
-  if (debug_->followGuide != -1)
-    worker->setFollowGuide((debug_->followGuide == 1));
-  worker->setSharedVolume(shared_volume_);
-  worker->setDebugSettings(debug_.get());
-  worker->setViaData(&viaData);
-  if (graphics_)
-    graphics_->startIter(worker->getDRIter());
-  std::string result = worker->reloadedMain();
-  bool updated = worker->end(design_.get());
-  debugPrint(logger_,
-             utl::DRT,
-             "autotuner",
-             1,
-             "End number of markers {}. Updated={}",
-             worker->getBestNumMarkers(),
-             updated);
-  if (updated)
-    reportDRC(drcRpt, worker.get());
+  // std::map<FlexDR::SearchRepairArgs, int> argsMap;
+  std::map<std::tuple<int, int, int, int, bool>, int> argsMap;
+  omp_set_num_threads(MAX_THREADS);
+  std::mutex mtx;
+  // FIXEDSHAPECOST = 3 * ROUTESHAPECOST;
+  auto strategies = strategy();
+  #pragma omp parallel for schedule(dynamic)
+  for(int i = 0; i < strategies.size(); i++)
+  {
+    const auto& args = strategies[i];
+    if(args.workerDRCCost != 64 || args.workerMarkerCost != 64)
+      continue;
+    auto argsTuple = std::make_tuple(args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.ripupMode, args.followGuide);
+    {
+      std::unique_lock lock(mtx);
+      if(argsMap.find(argsTuple) != argsMap.end())
+        continue;
+      else
+        argsMap[argsTuple] = 100;
+    }
+    auto worker
+        = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
+    worker->setMazeEndIter(args.mazeEndIter);
+    worker->setMarkerCost(args.workerMarkerCost);
+    worker->setDrcCost(args.workerDRCCost);
+    worker->setRipupMode(args.ripupMode);
+    worker->setFollowGuide((args.followGuide));
+    worker->setSharedVolume(shared_volume_);
+    worker->setDebugSettings(debug_.get());
+    worker->setViaData(&viaData);
+    // if (graphics_)
+    //   graphics_->startIter(worker->getDRIter());
+    
+    std::string result = worker->reloadedMain();
+    {
+      std::unique_lock lock(mtx);
+      argsMap[argsTuple] = worker->getBestNumMarkers();
+      debugPrint(logger_,
+               utl::DRT,
+               "autotuner",
+               1,
+               "{}_{}_{}_{}_{} Number of markers {}",
+               args.mazeEndIter,
+               args.workerDRCCost,
+               args.workerMarkerCost,
+               args.ripupMode,
+               args.followGuide,
+               worker->getBestNumMarkers());
+    }
+  }
+  // for(auto [args, numMarkers] : argsMap)
+  // {
+  //   debugPrint(logger_,
+  //              utl::DRT,
+  //              "autotuner",
+  //              1,
+  //              "{}_{}_{}_{}_{} Number of markers {}",
+  //              args.mazeEndIter,
+  //              args.workerDRCCost,
+  //              args.workerMarkerCost,
+  //              args.ripupMode,
+  //              args.followGuide,
+  //              numMarkers);
+  // }
+
+  // for(auto mazeEndIter : {8 ,16, 32, 64})
+  // {
+  //   for(auto markerCost : {2, 4, 8, 16, 32, 64})
+  //   {
+  //     for(auto drcCost : {2, 4, 8, 16, 32, 64})
+  //     {
+  //       for(auto followGuide : {true, false})
+  //       {
+  //         for(auto ripupMode : {0, 1})
+  //         {
+  //           auto worker
+  //               = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
+  //           worker->setMazeEndIter(mazeEndIter);
+  //           worker->setMarkerCost(markerCost * MARKERCOST);
+  //           worker->setDrcCost(drcCost * ROUTESHAPECOST);
+  //           worker->setRipupMode(ripupMode);
+  //           worker->setFollowGuide((followGuide));
+  //           worker->setSharedVolume(shared_volume_);
+  //           worker->setDebugSettings(debug_.get());
+  //           worker->setViaData(&viaData);
+  //           // if (graphics_)
+  //           //   graphics_->startIter(worker->getDRIter());
+            
+  //           std::string result = worker->reloadedMain();
+  //           bool updated = worker->end(design_.get());
+  //           debugPrint(logger_,
+  //                     utl::DRT,
+  //                     "autotuner",
+  //                     1,
+  //                     "End number of markers {}.",
+  //                     worker->getBestNumMarkers(),
+  //                     updated);
+  //         }
+  //       }
+  //     }
+  //   }
+  // }
+  // auto worker
+  //     = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
+  // if (debug_->mazeEndIter != -1)
+  //   worker->setMazeEndIter(debug_->mazeEndIter);
+  // if (debug_->markerCost != -1)
+  //   worker->setMarkerCost(debug_->markerCost);
+  // if (debug_->drcCost != -1)
+  //   worker->setDrcCost(debug_->drcCost);
+  // if (debug_->ripupMode != -1)
+  //   worker->setRipupMode(debug_->ripupMode);
+  // if (debug_->followGuide != -1)
+  //   worker->setFollowGuide((debug_->followGuide == 1));
+  // worker->setSharedVolume(shared_volume_);
+  // worker->setDebugSettings(debug_.get());
+  // worker->setViaData(&viaData);
+  // if (graphics_)
+  //   graphics_->startIter(worker->getDRIter());
+  
+  // std::string result = worker->reloadedMain();
+  // bool updated = worker->end(design_.get());
+  // debugPrint(logger_,
+  //            utl::DRT,
+  //            "autotuner",
+  //            1,
+  //            "End number of markers {}. Updated={}",
+  //            worker->getBestNumMarkers(),
+  //            updated);
+  // if (updated)
+  //   reportDRC(drcRpt, worker.get());
 }
 
 void TritonRoute::updateGlobals(const char* file_name)

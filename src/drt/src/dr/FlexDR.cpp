@@ -131,12 +131,12 @@ void FlexDR::setDebug(frDebugSettings* settings)
 std::string FlexDRWorker::reloadedMain()
 {
   init(design_);
-  debugPrint(logger_,
-             utl::DRT,
-             "autotuner",
-             1,
-             "Init number of markers {}",
-             getInitNumMarkers());
+  // debugPrint(logger_,
+  //            utl::DRT,
+  //            "autotuner",
+  //            1,
+  //            "Init number of markers {}",
+  //            getInitNumMarkers());
   route_queue();
   setGCWorker(nullptr);
   cleanup();
