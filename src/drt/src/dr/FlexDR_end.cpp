@@ -27,6 +27,7 @@
  */
 
 #include "dr/FlexDR.h"
+#include "frProfileTask.h"
 
 using namespace std;
 using namespace fr;
@@ -285,6 +286,7 @@ void FlexDRWorker::endRemoveNets(
     set<frNet*, frBlockObjectComp>& modNets,
     map<frNet*, set<pair<Point, frLayerNum>>, frBlockObjectComp>& boundPts)
 {
+  ProfileTask task("DR_END: endRemoveNets");
   vector<frBlockObject*> result;
   design->getRegionQuery()->queryDRObj(getRouteBox(), result);
   for (auto rptr : result) {
@@ -370,6 +372,7 @@ void FlexDRWorker::endAddNets_merge(frDesign* design,
                                     frNet* net,
                                     set<pair<Point, frLayerNum>>& boundPts)
 {
+  ProfileTask task("DR_END: endAddNets_merge");
   frRegionQuery::Objects<frBlockObject> result;
   vector<frBlockObject*> drObjs;
   vector<frPathSeg*> horzPathSegs;
