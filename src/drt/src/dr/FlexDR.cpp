@@ -1778,12 +1778,22 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
       }
       {
         ProfileTask profile("DR:end_batch");
+        #pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < (int) workersInBatch.size(); i++) {
+          workersInBatch[i]->end0();
+        }
         // single thread
         for (int i = 0; i < (int) workersInBatch.size(); i++) {
-          if(workersInBatch[i]->end0())
+          if(workersInBatch[i]->end1())
             numWorkUnits_ += 1;
-          workersInBatch[i]->end1();
+        }
+        #pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < (int) workersInBatch.size(); i++) {
           workersInBatch[i]->end2();
+        }
+        // single thread
+        for (int i = 0; i < (int) workersInBatch.size(); i++) {
+          workersInBatch[i]->end3();
           if (workersInBatch[i]->isCongested())
             increaseClipsize_ = true;
         }

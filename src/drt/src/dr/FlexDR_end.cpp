@@ -627,11 +627,15 @@ bool FlexDRWorker::end0()
   end_ = true;
   save_updates_ = dist_on_ || debugSettings_->debugDumpDR;
   endGetModNets(modNets);
+  return true;
+}
+bool FlexDRWorker::end1()
+{
   endRemoveNets(design_, modNets, boundPts);
   return true;
 }
 
-bool FlexDRWorker::end1()
+bool FlexDRWorker::end2()
 {
   if(!end_)
     return false;
@@ -641,7 +645,7 @@ bool FlexDRWorker::end1()
   endAddMarkers(design_);
   return true;
 }
-bool FlexDRWorker::end2()
+bool FlexDRWorker::end3()
 {
   if(!end_)
     return false;

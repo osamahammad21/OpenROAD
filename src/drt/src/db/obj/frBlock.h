@@ -41,6 +41,7 @@
 #include "db/obj/frBTerm.h"
 #include "db/obj/frTrackPattern.h"
 #include "frBaseTypes.h"
+#include <shared_mutex>
 
 namespace fr {
 namespace io {
@@ -383,13 +384,17 @@ class frBlock : public frBlockObject
   }
   void addMarker(std::unique_ptr<frMarker> in)
   {
+    std::unique_lock lock(markers_mtx_);
     auto rptr = in.get();
     markers_.push_back(std::move(in));
     rptr->setIter(--(markers_.end()));
     rptr->setIndexInOwner(all_markers_.size());
     all_markers_.push_back(rptr);
   }
-  void removeMarker(frMarker* in) { markers_.erase(in->getIter()); }
+  void removeMarker(frMarker* in) {
+    std::unique_lock lock(markers_mtx_);
+    markers_.erase(in->getIter());
+  }
   void addFakeSNet(std::unique_ptr<frNet> in)
   {
     fakeSNets_.push_back(std::move(in));
@@ -422,6 +427,7 @@ class frBlock : public frBlockObject
 
   frList<std::unique_ptr<frMarker>> markers_;
   std::vector<frMarker*> all_markers_;
+  mutable std::shared_mutex markers_mtx_;
 
   std::vector<std::unique_ptr<frNet>>
       fakeSNets_;  // 0 is floating VSS, 1 is floating VDD

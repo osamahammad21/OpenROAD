@@ -463,6 +463,7 @@ class FlexDRWorker
   bool end0();
   bool end1();
   bool end2();
+  bool end3();
 
   Logger* getLogger() { return logger_; }
   void setLogger(Logger* logger) { logger_ = logger; }

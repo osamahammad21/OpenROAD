@@ -39,6 +39,7 @@
 #include "db/obj/frVia.h"
 #include "frBaseTypes.h"
 #include "global.h"
+#include <shared_mutex>
 
 namespace fr {
 class frInstTerm;
@@ -127,30 +128,48 @@ class frNet : public frBlockObject
   void setName(const frString& stringIn) { name_ = stringIn; }
   void addShape(std::unique_ptr<frShape> in)
   {
-    in->addToNet(this);
-    in->setIndexInOwner(all_pinfigs_.size());
     auto rptr = in.get();
-    shapes_.push_back(std::move(in));
-    rptr->setIter(--shapes_.end());
-    all_pinfigs_.push_back(rptr);
+    in->addToNet(this);
+    {
+      std::unique_lock lock(shapes_mtx_);
+      shapes_.push_back(std::move(in));
+      rptr->setIter(--shapes_.end());
+    }
+    {
+      std::unique_lock lock(all_pinfigs_mtx_);
+      rptr->setIndexInOwner(all_pinfigs_.size());
+      all_pinfigs_.push_back(rptr);
+    }
   }
   void addVia(std::unique_ptr<frVia> in)
   {
-    in->addToNet(this);
-    in->setIndexInOwner(all_pinfigs_.size());
     auto rptr = in.get();
-    vias_.push_back(std::move(in));
-    rptr->setIter(--vias_.end());
-    all_pinfigs_.push_back(rptr);
+    in->addToNet(this);
+    {
+      std::unique_lock lock(vias_mtx_);
+      vias_.push_back(std::move(in));
+      rptr->setIter(--vias_.end());
+    }
+    {
+      std::unique_lock lock(all_pinfigs_mtx_);
+      rptr->setIndexInOwner(all_pinfigs_.size());
+      all_pinfigs_.push_back(rptr);
+    }
   }
   void addPatchWire(std::unique_ptr<frShape> in)
   {
-    in->addToNet(this);
-    in->setIndexInOwner(all_pinfigs_.size());
     auto rptr = in.get();
-    pwires_.push_back(std::move(in));
-    rptr->setIter(--pwires_.end());
-    all_pinfigs_.push_back(rptr);
+    in->addToNet(this);
+    {
+      std::unique_lock lock(pwires_mtx_);
+      pwires_.push_back(std::move(in));
+      rptr->setIter(--shapes_.end());
+    }
+    {
+      std::unique_lock lock(all_pinfigs_mtx_);
+      rptr->setIndexInOwner(all_pinfigs_.size());
+      all_pinfigs_.push_back(rptr);
+    }
   }
   void addGRShape(std::unique_ptr<grShape>& in)
   {
@@ -194,9 +213,18 @@ class frNet : public frBlockObject
     guides_.push_back(std::move(in));
   }
   void clearGuides() { guides_.clear(); }
-  void removeShape(frShape* in) { shapes_.erase(in->getIter()); }
-  void removeVia(frVia* in) { vias_.erase(in->getIter()); }
-  void removePatchWire(frShape* in) { pwires_.erase(in->getIter()); }
+  void removeShape(frShape* in) {
+    std::unique_lock lock(shapes_mtx_);
+    shapes_.erase(in->getIter());
+  }
+  void removeVia(frVia* in) {
+    std::unique_lock lock(vias_mtx_);
+    vias_.erase(in->getIter());
+  }
+  void removePatchWire(frShape* in) {
+    std::unique_lock lock(pwires_mtx_);
+    pwires_.erase(in->getIter());
+  }
   void removeGRShape(grShape* in) { grShapes_.erase(in->getIter()); }
   void clearGRShapes() { grShapes_.clear(); }
   void removeGRVia(grVia* in) { grVias_.erase(in->getIter()); }
@@ -271,6 +299,10 @@ class frNet : public frBlockObject
   bool isSpecial_;
 
   std::vector<frPinFig*> all_pinfigs_;
+  mutable std::shared_mutex shapes_mtx_;
+  mutable std::shared_mutex vias_mtx_;
+  mutable std::shared_mutex pwires_mtx_;
+  mutable std::shared_mutex all_pinfigs_mtx_;
 };
 }  // namespace fr
 
