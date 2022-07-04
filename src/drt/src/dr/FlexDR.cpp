@@ -1780,8 +1780,10 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
         ProfileTask profile("DR:end_batch");
         // single thread
         for (int i = 0; i < (int) workersInBatch.size(); i++) {
-          if(workersInBatch[i]->end(getDesign()))
+          if(workersInBatch[i]->end0())
             numWorkUnits_ += 1;
+          workersInBatch[i]->end1();
+          workersInBatch[i]->end2();
           if (workersInBatch[i]->isCongested())
             increaseClipsize_ = true;
         }

@@ -549,9 +549,6 @@ void FlexDRWorker::endAddNets(
       }
     }
   }
-  for (auto& [net, bPts] : boundPts) {
-    endAddNets_merge(design, net, bPts);
-  }
 }
 
 void FlexDRWorker::endRemoveMarkers(frDesign* design)
@@ -609,7 +606,7 @@ void FlexDRWorker::cleanup()
   specialAccessAPs.clear();
 }
 
-bool FlexDRWorker::end(frDesign* design)
+bool FlexDRWorker::end0()
 {
   if (skipRouting_ == true) {
     return false;
@@ -627,17 +624,29 @@ bool FlexDRWorker::end(frDesign* design)
              && getBestNumMarkers() > 5 * getInitNumMarkers()) {
     return false;
   }
+  end_ = true;
   save_updates_ = dist_on_ || debugSettings_->debugDumpDR;
-  set<frNet*, frBlockObjectComp> modNets;
   endGetModNets(modNets);
-  // get lock
-  map<frNet*, set<pair<Point, frLayerNum>>, frBlockObjectComp> boundPts;
-  endRemoveNets(design, modNets, boundPts);
-  endAddNets(design, boundPts);  // if two subnets have diff isModified()
-                                 // status, then should always write back
-  endRemoveMarkers(design);
-  endAddMarkers(design);
+  endRemoveNets(design_, modNets, boundPts);
   return true;
-  // release lock
+}
+
+bool FlexDRWorker::end1()
+{
+  if(!end_)
+    return false;
+  endAddNets(design_, boundPts);  // if two subnets have diff isModified()
+                                 // status, then should always write back
+  endRemoveMarkers(design_);
+  endAddMarkers(design_);
+  return true;
+}
+bool FlexDRWorker::end2()
+{
+  if(!end_)
+    return false;
+  for (auto& [net, bPts] : boundPts) {
+    endAddNets_merge(design_, net, bPts);
+  }
   return true;
 }

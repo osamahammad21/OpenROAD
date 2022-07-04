@@ -236,7 +236,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   if (graphics_)
     graphics_->startIter(worker->getDRIter());
   std::string result = worker->reloadedMain();
-  bool updated = worker->end(design_.get());
+  bool updated = worker->end0() && worker->end1() && worker->end2();
   debugPrint(logger_,
              utl::DRT,
              "autotuner",

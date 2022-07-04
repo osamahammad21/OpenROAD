@@ -321,7 +321,8 @@ class FlexDRWorker
         dist_port_(0),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        end_(false)
   {
   }
   FlexDRWorker()
@@ -335,7 +336,8 @@ class FlexDRWorker
         gcWorker_(nullptr),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        end_(false)
   {
   }
   // setters
@@ -458,7 +460,9 @@ class FlexDRWorker
   void distributedMain(frDesign* design);
   void updateDesign(frDesign* design);
   std::string reloadedMain();
-  bool end(frDesign* design);
+  bool end0();
+  bool end1();
+  bool end2();
 
   Logger* getLogger() { return logger_; }
   void setLogger(Logger* logger) { logger_ = logger; }
@@ -555,6 +559,9 @@ class FlexDRWorker
   bool dist_on_;
   bool isCongested_;
   bool save_updates_;
+  bool end_;
+  set<frNet*, frBlockObjectComp> modNets;
+  map<frNet*, set<pair<Point, frLayerNum>>, frBlockObjectComp> boundPts;
 
   // init
   void init(const frDesign* design);
