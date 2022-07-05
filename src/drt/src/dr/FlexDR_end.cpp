@@ -634,6 +634,7 @@ bool FlexDRWorker::end1()
   if(!end_)
     return;
   endRemoveNets(design_, modNets, boundPts);
+  endRemoveMarkers(design_);
   return true;
 }
 
@@ -643,7 +644,6 @@ bool FlexDRWorker::end2()
     return false;
   endAddNets(design_, boundPts);  // if two subnets have diff isModified()
                                  // status, then should always write back
-  endRemoveMarkers(design_);
   endAddMarkers(design_);
   return true;
 }
