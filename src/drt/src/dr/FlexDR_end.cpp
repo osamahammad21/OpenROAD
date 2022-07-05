@@ -631,6 +631,8 @@ bool FlexDRWorker::end0()
 }
 bool FlexDRWorker::end1()
 {
+  if(!end_)
+    return;
   endRemoveNets(design_, modNets, boundPts);
   return true;
 }
