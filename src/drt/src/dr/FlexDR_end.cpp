@@ -632,7 +632,7 @@ bool FlexDRWorker::end0()
 bool FlexDRWorker::end1()
 {
   if(!end_)
-    return;
+    return false;
   endRemoveNets(design_, modNets, boundPts);
   endRemoveMarkers(design_);
   return true;
