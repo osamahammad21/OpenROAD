@@ -43,6 +43,7 @@ option(USE_CIMG_LIB "Use CImg drawing library for image drawing" OFF)
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 
 find_package(Eigen3 REQUIRED)
+find_package(VTune)
 
 swig_lib(NAME      gpl
          NAMESPACE gpl
@@ -108,3 +109,19 @@ if( USE_CIMG_LIB )
     )
   endif()
 endif()
+
+############################################################
+# VTune ITT API
+############################################################
+if (VTune_FOUND)
+  target_compile_definitions(gpl
+    PUBLIC
+    HAS_VTUNE=1
+  )
+
+  target_link_libraries(gpl
+    PUBLIC
+    VTune::VTune
+  )
+
+endif(VTune_FOUND)

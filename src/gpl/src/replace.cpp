@@ -43,7 +43,7 @@
 #include "odb/db.h"
 #include "plot.h"
 #include <iostream>
-
+#include "gpProfileTask.h"
 namespace gpl {
 
 using namespace std;
@@ -172,6 +172,7 @@ void Replace::setLogger(utl::Logger* logger) {
 
 void Replace::doIncrementalPlace()
 {
+  ProfileTask task("doIncrementalPlace");
   PlacerBaseVars pbVars;
   pbVars.padLeft = padLeft_;
   pbVars.padRight = padRight_;
@@ -229,6 +230,7 @@ void Replace::doIncrementalPlace()
 
 void Replace::doInitialPlace()
 {
+  ProfileTask task("doInitialPlace");
   if (pb_ == nullptr) {
     PlacerBaseVars pbVars;
     pbVars.padLeft = padLeft_;
@@ -252,6 +254,7 @@ void Replace::doInitialPlace()
 }
 
 void Replace::initNesterovPlace() {
+  ProfileTask task("initNesterovPlace");
   if( !pb_ ) {
     PlacerBaseVars pbVars;
     pbVars.padLeft = padLeft_;
@@ -325,6 +328,7 @@ void Replace::initNesterovPlace() {
 }
 
 int Replace::doNesterovPlace(int start_iter) {
+  ProfileTask task("doNesterovPlace");
   initNesterovPlace();
   if (timingDrivenMode_)
     rs_->resizeSlackPreamble();
