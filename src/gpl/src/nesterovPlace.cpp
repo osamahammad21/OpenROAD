@@ -41,6 +41,7 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
+#include "gpProfileTask.h"
 using namespace std;
 
 #include "plot.h"
@@ -330,58 +331,59 @@ NesterovPlace::updateGradients(
     std::vector<FloatPoint>& sumGrads,
     std::vector<FloatPoint>& wireLengthGrads,
     std::vector<FloatPoint>& densityGrads) {
-
+  ProfileTask task("updateGradients");
   wireLengthGradSum_ = 0;
   densityGradSum_ = 0;
 
   float gradSum = 0;
 
   debugPrint(log_, GPL, "replace", 3, "updateGrad:  DensityPenalty: {:g}", densityPenalty_);
+  {
+    ProfileTask task("calcGradient");
+    for(size_t i=0; i<nb_->gCells().size(); i++) {
+      GCell* gCell = nb_->gCells().at(i);
+      wireLengthGrads[i] = nb_->getWireLengthGradientWA(
+          gCell, wireLengthCoefX_, wireLengthCoefY_);
+      densityGrads[i] = nb_->getDensityGradient(gCell); 
 
-  for(size_t i=0; i<nb_->gCells().size(); i++) {
-    GCell* gCell = nb_->gCells().at(i);
-    wireLengthGrads[i] = nb_->getWireLengthGradientWA(
-        gCell, wireLengthCoefX_, wireLengthCoefY_);
-    densityGrads[i] = nb_->getDensityGradient(gCell); 
+      // Different compiler has different results on the following formula.
+      // e.g. wireLengthGradSum_ += fabs(~~.x) + fabs(~~.y);
+      //
+      // To prevent instability problem,
+      // I partitioned the fabs(~~.x) + fabs(~~.y) as two terms.
+      //
+      wireLengthGradSum_ += fabs(wireLengthGrads[i].x);
+      wireLengthGradSum_ += fabs(wireLengthGrads[i].y);
+        
+      densityGradSum_ += fabs(densityGrads[i].x);
+      densityGradSum_ += fabs(densityGrads[i].y);
 
-    // Different compiler has different results on the following formula.
-    // e.g. wireLengthGradSum_ += fabs(~~.x) + fabs(~~.y);
-    //
-    // To prevent instability problem,
-    // I partitioned the fabs(~~.x) + fabs(~~.y) as two terms.
-    //
-    wireLengthGradSum_ += fabs(wireLengthGrads[i].x);
-    wireLengthGradSum_ += fabs(wireLengthGrads[i].y);
+      sumGrads[i].x = wireLengthGrads[i].x + densityPenalty_ * densityGrads[i].x;
+      sumGrads[i].y = wireLengthGrads[i].y + densityPenalty_ * densityGrads[i].y;
+
+      FloatPoint wireLengthPreCondi 
+        = nb_->getWireLengthPreconditioner(gCell);
+      FloatPoint densityPrecondi
+        = nb_->getDensityPreconditioner(gCell);
+
+      FloatPoint sumPrecondi(
+          wireLengthPreCondi.x + densityPenalty_ * densityPrecondi.x,
+          wireLengthPreCondi.y + densityPenalty_ * densityPrecondi.y);
+
+      if( sumPrecondi.x <= npVars_.minPreconditioner ) {
+        sumPrecondi.x = npVars_.minPreconditioner;
+      }
+
+      if( sumPrecondi.y <= npVars_.minPreconditioner ) {
+        sumPrecondi.y = npVars_.minPreconditioner; 
+      }
       
-    densityGradSum_ += fabs(densityGrads[i].x);
-    densityGradSum_ += fabs(densityGrads[i].y);
+      sumGrads[i].x /= sumPrecondi.x;
+      sumGrads[i].y /= sumPrecondi.y; 
 
-    sumGrads[i].x = wireLengthGrads[i].x + densityPenalty_ * densityGrads[i].x;
-    sumGrads[i].y = wireLengthGrads[i].y + densityPenalty_ * densityGrads[i].y;
-
-    FloatPoint wireLengthPreCondi 
-      = nb_->getWireLengthPreconditioner(gCell);
-    FloatPoint densityPrecondi
-      = nb_->getDensityPreconditioner(gCell);
-
-    FloatPoint sumPrecondi(
-        wireLengthPreCondi.x + densityPenalty_ * densityPrecondi.x,
-        wireLengthPreCondi.y + densityPenalty_ * densityPrecondi.y);
-
-    if( sumPrecondi.x <= npVars_.minPreconditioner ) {
-      sumPrecondi.x = npVars_.minPreconditioner;
+      gradSum += fabs(sumGrads[i].x) + fabs(sumGrads[i].y);
     }
-
-    if( sumPrecondi.y <= npVars_.minPreconditioner ) {
-      sumPrecondi.y = npVars_.minPreconditioner; 
-    }
-    
-    sumGrads[i].x /= sumPrecondi.x;
-    sumGrads[i].y /= sumPrecondi.y; 
-
-    gradSum += fabs(sumGrads[i].x) + fabs(sumGrads[i].y);
   }
-  
   debugPrint(log_, GPL, "replace", 3, "updateGrad:  WireLengthGradSum: {:g}", wireLengthGradSum_);
   debugPrint(log_, GPL, "replace", 3, "updateGrad:  DensityGradSum: {:g}", densityGradSum_);
   debugPrint(log_, GPL, "replace", 3, "updateGrad:  GradSum: {:g}", gradSum);
@@ -513,9 +515,18 @@ NesterovPlace::doNesterovPlace(int start_iter) {
       }
  
 
-      nb_->updateGCellDensityCenterLocation(nextSLPCoordi_);
-      nb_->updateDensityForceBin();
-      nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+      {
+        ProfileTask task("updateGCellDensityCenterLocation");
+        nb_->updateGCellDensityCenterLocation(nextSLPCoordi_);
+      }
+      {
+        ProfileTask task("updateDensityForceBin");
+        nb_->updateDensityForceBin();
+      }
+      {
+        ProfileTask task("updateWireLengthForceWA");
+        nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+      }
 
       updateGradients(nextSLPSumGrads_, nextSLPWireLengthGrads_, nextSLPDensityGrads_ );
 
@@ -566,8 +577,10 @@ NesterovPlace::doNesterovPlace(int start_iter) {
     if( isDiverged_ ) {
       break;
     }
-
-    updateNextIter(); 
+    {
+      ProfileTask task("updateNextIter");
+      updateNextIter(); 
+    }
 
 
     // For JPEG Saving
@@ -607,7 +620,12 @@ NesterovPlace::doNesterovPlace(int start_iter) {
       // and update GNet's weights from worst timing paths.
       //
       // See timingBase.cpp in detail
-      bool shouldTdProceed = tb_->updateGNetWeights(sumOverflow_); 
+      bool shouldTdProceed;
+      {
+        ProfileTask task("updateGNetWeights");
+        shouldTdProceed = tb_->updateGNetWeights(sumOverflow_); 
+      }
+
 
       // problem occured
       // escape timing driven later
@@ -649,10 +667,18 @@ NesterovPlace::doNesterovPlace(int start_iter) {
         stepLength_ = snapshotStepLength;
         wireLengthCoefX_ = snapshotWlCoefX;
         wireLengthCoefY_ = snapshotWlCoefY;
-
-        nb_->updateGCellDensityCenterLocation(curCoordi_);
-        nb_->updateDensityForceBin();
-        nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+        {
+          ProfileTask task("updateGCellDensityCenterLocation");
+          nb_->updateGCellDensityCenterLocation(curCoordi_);
+        }
+        {
+          ProfileTask task("updateDensityForceBin");
+          nb_->updateDensityForceBin();
+        }
+        {
+          ProfileTask task("updateWireLengthForceWA");
+          nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+        }
 
         isDiverged_ = false;
         divergeCode_ = 0;
@@ -692,7 +718,11 @@ NesterovPlace::doNesterovPlace(int start_iter) {
 
       // recover the densityPenalty values
       // if further routability-driven is needed 
-      std::pair<bool, bool> result = rb_->routability();
+      std::pair<bool, bool> result;
+      {
+        ProfileTask task("routability");
+        result = rb_->routability();
+      }
       isRoutabilityNeed_ = result.first;
       bool isRevertInitNeeded = result.second;
 
@@ -711,9 +741,18 @@ NesterovPlace::doNesterovPlace(int start_iter) {
         wireLengthCoefX_ = snapshotWlCoefX;
         wireLengthCoefY_ = snapshotWlCoefY;
 
-        nb_->updateGCellDensityCenterLocation(curCoordi_);
-        nb_->updateDensityForceBin();
-        nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+        {
+          ProfileTask task("updateGCellDensityCenterLocation");
+          nb_->updateGCellDensityCenterLocation(curCoordi_);
+        }
+        {
+          ProfileTask task("updateDensityForceBin");
+          nb_->updateDensityForceBin();
+        }
+        {
+          ProfileTask task("updateWireLengthForceWA");
+          nb_->updateWireLengthForceWA(wireLengthCoefX_, wireLengthCoefY_);
+        }
   
         // reset the divergence detect conditions 
         minSumOverflow = 1e30;
@@ -875,6 +914,7 @@ NesterovPlace::getPhiCoef(float scaledDiffHpwl) const {
 
 void
 NesterovPlace::updateDb() {
+  ProfileTask task("updateDb");
   nb_->updateDbGCells();
 }
 
