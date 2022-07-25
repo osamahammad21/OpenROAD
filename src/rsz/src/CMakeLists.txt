@@ -34,7 +34,7 @@
 ############################################################################
 
 include("openroad")
-
+find_package(VTune)
 swig_lib(NAME      rsz
          NAMESPACE rsz
          I_FILE    Resizer.i
@@ -75,3 +75,18 @@ messages(
   TARGET rsz
   OUTPUT_DIR ..
 )
+############################################################
+# VTune ITT API
+############################################################
+if (VTune_FOUND)
+  target_compile_definitions(rsz
+    PUBLIC
+    HAS_VTUNE=1
+  )
+
+  target_link_libraries(rsz
+    PUBLIC
+    VTune::VTune
+  )
+
+endif(VTune_FOUND)

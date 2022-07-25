@@ -60,6 +60,7 @@
 #include "sta/Search.hh"
 #include "sta/StaMain.hh"
 #include "sta/Fuzzy.hh"
+#include "rsProfileTask.h"
 
 // http://vlsicad.eecs.umich.edu/BK/Slots/cache/dropzone.tamu.edu/~zhuoli/GSRC/fast_buffer_insertion.html
 
@@ -892,14 +893,26 @@ void
 Resizer::findResizeSlacks()
 {
   journalBegin();
-  estimateWireParasitics();
+  {
+    ProfileTask task("rsz: estimateWireParasitics");
+    estimateWireParasitics();
+  }
   int repaired_net_count, slew_violations, cap_violations;
   int fanout_violations, length_violations;
-  repair_design_->repairDesign(max_wire_length_, 0.0, 0.0,
-                               repaired_net_count, slew_violations, cap_violations,
-                               fanout_violations, length_violations);
-  findResizeSlacks1();
-  journalRestore(resize_count_, inserted_buffer_count_);
+  {
+    ProfileTask task("rsz: repairDesign");
+    repair_design_->repairDesign(max_wire_length_, 0.0, 0.0,
+                                repaired_net_count, slew_violations, cap_violations,
+                                fanout_violations, length_violations);
+  }
+  {
+    ProfileTask task("rsz: findResizeSlacks1");
+    findResizeSlacks1();
+  }
+  {
+    ProfileTask task("rsz: journalRestore");
+    journalRestore(resize_count_, inserted_buffer_count_);
+  }
 }
   
 void
