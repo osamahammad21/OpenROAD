@@ -34,6 +34,7 @@
 #include "frProfileTask.h"
 #include "io/io.h"
 #include "utl/exception.h"
+#include "ord/OpenRoad.hh"
 
 using namespace std;
 using namespace fr;
@@ -1190,6 +1191,8 @@ void FlexDRConnectivityChecker::check(int iter)
         exception.capture();
       }
     }
+    if(exception.hasException())
+      logger_->report("Has Exception 1");
     exception.rethrow();
     init_parallel.done();
     ProfileTask merge_serial("merge-serial");
@@ -1254,6 +1257,8 @@ void FlexDRConnectivityChecker::check(int iter)
         exception.capture();
       }
     }
+    if(exception.hasException())
+      logger_->report("Has Exception 2");
     exception.rethrow();
     astar_parallel.done();
     ProfileTask finish_serial("finish-serial");
@@ -1281,6 +1286,7 @@ void FlexDRConnectivityChecker::check(int iter)
           }
         }
         isWrong = true;
+        logger_->report("isWrong set to true");
       } else {
         // get lock
         // delete / shrink netRouteObjs,
@@ -1289,13 +1295,14 @@ void FlexDRConnectivityChecker::check(int iter)
       }
     }
   }
-
+  logger_->report("Reached Here");
   if (isWrong) {
     if (graphics_) {
       graphics_->debugWholeDesign();
     }
     auto writer = io::Writer(design_, logger_);
     writer.updateDb(db_);
+    ord::OpenRoad::openRoad()->writeDb("conn_failed.odb");
     logger_->error(utl::DRT, 206, "checkConnectivity error.");
   }
 }

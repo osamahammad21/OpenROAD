@@ -1806,6 +1806,15 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
       }
     }
   }
+  //write updates
+  serializeUpdates(design_->getUpdates(),"updates.bin");
+  design_->clearUpdates();
+  std::ofstream file("globals.bin");
+  frOArchive ar(file);
+  registerTypes(ar);
+  serializeGlobals(ar);
+  file.close();
+  
   FlexDRConnectivityChecker checker(
       getDesign(),
       logger_,

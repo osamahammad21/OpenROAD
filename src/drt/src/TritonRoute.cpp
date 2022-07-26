@@ -740,9 +740,8 @@ int TritonRoute::main()
         asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this));
     }
   }
-  if (debug_->debugDumpDR) {
-    ord::OpenRoad::openRoad()->writeDb(
-        fmt::format("{}/design.db", debug_->dumpDir).c_str());
+  if (true) {
+    ord::OpenRoad::openRoad()->writeDb("pre_design.db");
   }
   if (!initGuide()) {
     gr();
