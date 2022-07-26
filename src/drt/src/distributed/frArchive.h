@@ -47,7 +47,7 @@ using InputArchive
                                            std::istream::traits_type>;
 struct frOArchive : OutputArchive
 {
-  frOArchive(std::ostream& os, unsigned flags = 0) : OutputArchive(os, flags) {}
+  frOArchive(std::ostream& os, unsigned flags = 0) : OutputArchive(os, flags), minimal(false) {}
 
   // forward to base class
   template <class T>
@@ -56,11 +56,14 @@ struct frOArchive : OutputArchive
     OutputArchive::save(t);
   }
   frDesign* getDesign() const { return nullptr; }
-
+  bool isMinimal() const { return minimal; }
+  void setMinimal() { minimal = true; }
+  private:
+  bool minimal;
 };
 struct frIArchive : InputArchive
 {
-  frIArchive(std::istream& os, unsigned flags = 0) : InputArchive(os, flags) {}
+  frIArchive(std::istream& os, unsigned flags = 0) : InputArchive(os, flags), minimal(false) {}
 
   // forward to base class
   template <class T>
@@ -70,9 +73,12 @@ struct frIArchive : InputArchive
   }
   frDesign* getDesign() const { return design; }
   void setDesign(frDesign* in) { design = in; }
+  bool isMinimal() const { return minimal; }
+  void setMinimal() { minimal = true; }
 
  private:
   frDesign* design;
+  bool minimal;
 };
 }  // namespace fr
 

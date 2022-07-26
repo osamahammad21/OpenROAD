@@ -54,6 +54,8 @@
 #include "ord/OpenRoad.hh"
 #include "serialization.h"
 #include "utl/exception.h"
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/post.hpp>
 
 using namespace std;
 using namespace fr;
@@ -68,11 +70,13 @@ enum class SerializationType
   WRITE
 };
 
-void serializeWorker(FlexDRWorker* worker, std::string& workerStr)
+void serializeWorker(FlexDRWorker* worker, std::string& workerStr, bool minimal = false)
 {
   std::stringstream stream(std::ios_base::binary | std::ios_base::in
                            | std::ios_base::out);
   frOArchive ar(stream);
+  if(minimal)
+    ar.setMinimal();
   registerTypes(ar);
   ar << *worker;
   workerStr = stream.str();
@@ -80,13 +84,16 @@ void serializeWorker(FlexDRWorker* worker, std::string& workerStr)
 
 void deserializeWorker(FlexDRWorker* worker,
                        frDesign* design,
-                       const std::string& workerStr)
+                       const std::string& workerStr,
+                       bool minimal = false)
 {
   std::stringstream stream(
       workerStr,
       std::ios_base::binary | std::ios_base::in | std::ios_base::out);
   frIArchive ar(stream);
   ar.setDesign(design);
+  if(minimal)
+    ar.setMinimal();
   registerTypes(ar);
   ar >> *worker;
 }
@@ -143,7 +150,7 @@ std::string FlexDRWorker::reloadedMain()
   setGCWorker(nullptr);
   cleanup();
   std::string workerStr;
-  serializeWorker(this, workerStr);
+  serializeWorker(this, workerStr, true);
   return workerStr;
 }
 
@@ -1770,7 +1777,8 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
               for (int i = 0; i < workers.size(); i++) {
                 deserializeWorker(workersInBatch.at(workers.at(i).first).get(),
                                   design_,
-                                  workers.at(i).second);
+                                  workers.at(i).second,
+                                  true);
               }
             }
             logger_->report("    Deserialized Batches:{}.", t);
@@ -1779,13 +1787,16 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
       }
       {
         ProfileTask profile("DR:end_batch");
+        boost::asio::thread_pool pool(MAX_THREADS-1);
         // single thread
         for (int i = 0; i < (int) workersInBatch.size(); i++) {
           if (workersInBatch[i]->end(getDesign()))
             numWorkUnits_ += 1;
           if (workersInBatch[i]->isCongested())
             increaseClipsize_ = true;
+          boost::asio::post(pool, [&workersInBatch, i](){workersInBatch[i].reset();});
         }
+        pool.join();
         workersInBatch.clear();
       }
     }
@@ -2333,16 +2344,16 @@ void FlexDRWorker::serialize(Archive& ar, const unsigned int version)
   (ar) & workerMarkerCost_;
   (ar) & pinCnt_;
   (ar) & initNumMarkers_;
-  (ar) & apSVia_;
-  (ar) & planarHistoryMarkers_;
-  (ar) & viaHistoryMarkers_;
-  (ar) & historyMarkers_;
   (ar) & nets_;
-  (ar) & gridGraph_;
-  (ar) & markers_;
+  gridGraph_ = FlexGridGraph(design_->getTech(), this);
+  if(!ar.isMinimal())
+    (ar) & markers_; //to be removed
   (ar) & bestMarkers_;
   (ar) & isCongested_;
   if (is_loading(ar)) {
+    dist_on_ = true;
+    if(ar.isMinimal())
+      return;
     // boundaryPin_
     int sz;
     (ar) & sz;
@@ -2353,12 +2364,9 @@ void FlexDRWorker::serialize(Archive& ar, const unsigned int version)
       (ar) & val;
       boundaryPin_[(frNet*) obj] = val;
     }
-    // owner2nets_
-    for (auto& net : nets_) {
-      owner2nets_[net->getFrNet()].push_back(net.get());
-    }
-    dist_on_ = true;
   } else {
+    if(ar.isMinimal())
+      return;
     // boundaryPin_
     int sz = boundaryPin_.size();
     (ar) & sz;
@@ -2370,12 +2378,12 @@ void FlexDRWorker::serialize(Archive& ar, const unsigned int version)
   }
 }
 
-std::unique_ptr<FlexDRWorker> FlexDRWorker::load(const std::string& workerStr,
+void FlexDRWorker::load(std::unique_ptr<FlexDRWorker>& worker,
+                                                 const std::string& workerStr,
                                                  utl::Logger* logger,
                                                  fr::frDesign* design,
                                                  FlexDRGraphics* graphics)
 {
-  auto worker = std::make_unique<FlexDRWorker>();
   deserializeWorker(worker.get(), design, workerStr);
 
   // We need to fix up the fields we want from the current run rather
@@ -2383,7 +2391,6 @@ std::unique_ptr<FlexDRWorker> FlexDRWorker::load(const std::string& workerStr,
   worker->setLogger(logger);
   worker->setGraphics(graphics);
 
-  return worker;
 }
 
 // Explicit instantiations

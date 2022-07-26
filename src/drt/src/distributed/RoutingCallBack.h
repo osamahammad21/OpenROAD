@@ -80,11 +80,15 @@ class RoutingCallBack : public dst::JobCallBack
     asio::thread_pool reply_pool(1);
     int prev_perc = 0;
     int cnt = 0;
+    std::vector<std::unique_ptr<FlexDRWorker>> uWorkers;
+    uWorkers.reserve(size);
+    std::generate_n(std::back_inserter(uWorkers), size, [] { return std::make_unique<FlexDRWorker>(); });
+    
 #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < workers.size(); i++) {
       std::pair<int, std::string> result
           = {workers.at(i).first,
-             router_->runDRWorker(workers.at(i).second, &via_data_)};
+             router_->runDRWorker(uWorkers[i], workers.at(i).second, &via_data_)};
 #pragma omp critical
       {
         results.push_back(result);
@@ -106,6 +110,12 @@ class RoutingCallBack : public dst::JobCallBack
     }
     reply_pool.join();
     sendResult(results, sock, true, cnt);
+    #pragma omp parallel for schedule(dynamic)
+    for(int i = 0; i < uWorkers.size(); i++)
+    {
+      uWorkers[i].reset();
+    }
+    uWorkers.clear();
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override

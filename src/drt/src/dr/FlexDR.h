@@ -463,7 +463,8 @@ class FlexDRWorker
   Logger* getLogger() { return logger_; }
   void setLogger(Logger* logger) { logger_ = logger; }
 
-  static std::unique_ptr<FlexDRWorker> load(const std::string& file_name,
+  static void load(std::unique_ptr<FlexDRWorker>& worker,
+                                            const std::string& file_name,
                                             utl::Logger* logger,
                                             fr::frDesign* design,
                                             FlexDRGraphics* graphics);

@@ -180,16 +180,16 @@ int TritonRoute::getNumDRVs() const
   return num_drvs_;
 }
 
-std::string TritonRoute::runDRWorker(const std::string& workerStr,
-                                     FlexDRViaData* viaData)
+std::string TritonRoute::runDRWorker(std::unique_ptr<FlexDRWorker>& worker,
+                              const std::string& workerStr,
+                              FlexDRViaData* viaData)
 {
   bool on = debug_->debugDR;
   std::unique_ptr<FlexDRGraphics> graphics_
       = on && FlexDRGraphics::guiActive() ? std::make_unique<FlexDRGraphics>(
             debug_.get(), design_.get(), db_, logger_)
                                           : nullptr;
-  auto worker
-      = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
+  FlexDRWorker::load(worker, workerStr, logger_, design_.get(), graphics_.get());
   worker->setViaData(viaData);
   worker->setSharedVolume(shared_volume_);
   worker->setDebugSettings(debug_.get());
@@ -218,8 +218,8 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
                         std::istreambuf_iterator<char>());
   workerFile.close();
-  auto worker
-      = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
+  std::unique_ptr<FlexDRWorker> worker = std::make_unique<FlexDRWorker>();
+  FlexDRWorker::load(worker, workerStr, logger_, design_.get(), graphics_.get());
   if (debug_->mazeEndIter != -1)
     worker->setMazeEndIter(debug_->mazeEndIter);
   if (debug_->markerCost != -1)
