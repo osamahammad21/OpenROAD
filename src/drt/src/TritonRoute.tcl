@@ -395,4 +395,8 @@ proc step_dr { args } {
   drt::detailed_route_step_drt {*}$args
 }
 
+proc start_test { args } {
+  drt::static_test
+}
+
 }

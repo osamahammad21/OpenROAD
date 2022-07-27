@@ -158,6 +158,7 @@ class TritonRoute
   void sendGlobalsUpdates(const std::string& globals_path, const std::string& serializedViaData);
   void setGuideFile(const std::string& guide_path);
   void reportDRC(const std::string& file_name, fr::FlexDRWorker* worker = nullptr);
+  void dummyTest();
 
  private:
   std::unique_ptr<fr::frDesign> design_;

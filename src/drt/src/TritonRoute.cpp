@@ -39,6 +39,7 @@
 #include "distributed/drUpdate.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR.h"
+#include "dr/FlexDR_conn.h"
 #include "dr/FlexDR_graphics.h"
 #include "dst/Distributed.h"
 #include "frDesign.h"
@@ -246,6 +247,17 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
              updated);
   if (updated)
     reportDRC(drcRpt, worker.get());
+}
+
+void TritonRoute::dummyTest()
+{
+  FlexDRConnectivityChecker checker(
+      getDesign(),
+      logger_,
+      db_,
+      nullptr,
+      false);
+  checker.check(0);
 }
 
 void TritonRoute::updateGlobals(const char* file_name)

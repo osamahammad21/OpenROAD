@@ -213,4 +213,13 @@ void step_end()
   router->endFR();
 }
 
+void static_test()
+{
+  auto* router = ord::OpenRoad::openRoad()->getTritonRoute();
+  router->resetDb("pre_design.odb");
+  router->updateGlobals("globals.bin");
+  router->updateDesign("updates.bin");
+  router->dummyTest();
+}
+
 %} // inline
