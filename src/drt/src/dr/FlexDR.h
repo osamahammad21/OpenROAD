@@ -180,6 +180,7 @@ class FlexDR
   bool increaseClipsize_;
   float clipSizeInc_;
   int iter_;
+  double dr_runtime_;
 
   // others
   void initFromTA();

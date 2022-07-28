@@ -52,7 +52,13 @@ class frTime
         = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0_);
     return (time_span.count() > in);
   }
-
+  double getTime()
+  {
+    auto t1 = std::chrono::high_resolution_clock::now();
+    auto time_span
+        = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0_);
+    return time_span.count();
+  }
  private:
   std::chrono::high_resolution_clock::time_point t0_;
   clock_t t_;

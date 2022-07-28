@@ -113,7 +113,8 @@ FlexDR::FlexDR(triton_route::TritonRoute* router,
       dist_port_(0),
       increaseClipsize_(false),
       clipSizeInc_(0),
-      iter_(0)
+      iter_(0),
+      dr_runtime_(0.0)
 {
 }
 
@@ -1830,6 +1831,9 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
     t.print(logger_);
     cout << flush;
   }
+  
+  if(iter > 3)
+    dr_runtime_ += t.getTime();
   end();
   if (logger_->debugCheck(DRT, "autotuner", 1)
       || logger_->debugCheck(DRT, "report", 1)) {
@@ -1881,6 +1885,7 @@ void FlexDR::end(bool done)
     logger_->metric("route__vias", totSCut + totMCut);
     logger_->metric("route__vias__singlecut", totSCut);
     logger_->metric("route__vias__multicut", totMCut);
+    logger_->metric("route__runtime", dr_runtime_);
   }
   else {
     logger_->metric(fmt::format("route__drc_errors__iter:{}", iter_), getDesign()->getTopBlock()->getNumMarkers());
