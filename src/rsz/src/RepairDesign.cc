@@ -52,6 +52,7 @@
 #include "sta/PathRef.hh"
 #include "sta/PathExpanded.hh"
 #include "sta/Fuzzy.hh"
+#include  "rsProfileTask.h"
 
 namespace rsz {
 
@@ -136,7 +137,10 @@ RepairDesign::repairDesign(double max_wire_length, // zero for none (meters)
                            int &fanout_violations,
                            int &length_violations)
 {
-  init();
+  {
+    ProfileTask task("repairDesign: init");
+    init();
+  }
 
   slew_violations = 0;
   cap_violations = 0;
@@ -147,12 +151,23 @@ RepairDesign::repairDesign(double max_wire_length, // zero for none (meters)
   resize_count_ = 0;
   resizer_->resized_multi_output_insts_.clear();
 
-  sta_->checkSlewLimitPreamble();
-  sta_->checkCapacitanceLimitPreamble();
-  sta_->checkFanoutLimitPreamble();
-
+  
+  {
+    ProfileTask task("repairDesign: sta: checkSlewLimitPreamble");
+    sta_->checkSlewLimitPreamble();
+  }
+  {
+    ProfileTask task("repairDesign: sta: checkCapacitanceLimitPreamble");
+    sta_->checkCapacitanceLimitPreamble();
+  }
+  {
+    ProfileTask task("repairDesign: sta: checkFanoutLimitPreamble");
+    sta_->checkFanoutLimitPreamble();
+  }
+  
   resizer_->incrementalParasiticsBegin();
   int max_length = resizer_->metersToDbu(max_wire_length);
+  ProfileTask forTask("repairDesign: mainForLoop");
   for (int i = resizer_->level_drvr_vertices_.size() - 1; i >= 0; i--) {
     Vertex *drvr = resizer_->level_drvr_vertices_[i];
     Pin *drvr_pin = drvr->pin();
@@ -162,18 +177,22 @@ RepairDesign::repairDesign(double max_wire_length, // zero for none (meters)
     bool debug = (drvr_pin == resizer_->debug_pin_);
     if (debug)
       logger_->setDebugLevel(RSZ, "repair_net", 3);
-    if (net
-        && !sta_->isClock(drvr_pin)
-        // Exclude tie hi/low cells and supply nets.
-        && !drvr->isConstant())
+    if (net && !sta_->isClock(drvr_pin) && !drvr->isConstant()) 
+    {
+      ProfileTask task("repairDesign: repairNet");
       repairNet(net, drvr_pin, drvr, slew_margin, max_cap_margin,
                 true, true, true, max_length, true,
                 repaired_net_count, slew_violations, cap_violations,
                 fanout_violations, length_violations);
+    }
     if (debug)
       logger_->setDebugLevel(RSZ, "repair_net", 0);
   }
-  resizer_->updateParasitics();
+  forTask.done();
+  {
+    ProfileTask task("repairDesign: updateParasitics");
+    resizer_->updateParasitics();
+  }
   resizer_->incrementalParasiticsEnd();
 
   if (inserted_buffer_count_ > 0)
@@ -314,15 +333,25 @@ RepairDesign::repairNet(Net *net,
     debugPrint(logger_, RSZ, "repair_net", 1, "repair net {}",
                sdc_network_->pathName(drvr_pin));
     // Resize the driver to normalize slews before repairing limit violations.
-    if (resize_drvr)
+    if (resize_drvr) {
+      ProfileTask task("repairNet: rsz");
       resize_count_ += resizer_->resizeToTargetSlew(drvr_pin);
+    }
     // For tristate nets all we can do is resize the driver.
     if (!resizer_->isTristateDriver(drvr_pin)) {
       const Corner *corner = sta_->cmdCorner();
+      ProfileTask bnetTask("repairNet: rsz");
       BufferedNetPtr bnet = resizer_->makeBufferedNetSteiner(drvr_pin, corner);
+      bnetTask.done();
       if (bnet) {
-        resizer_->ensureWireParasitic(drvr_pin, net);
-        graph_delay_calc_->findDelays(drvr);
+        {
+          ProfileTask task("repairNet: rsz");
+          resizer_->ensureWireParasitic(drvr_pin, net); 
+        }
+        {
+          ProfileTask task("repairNet: sta");
+          graph_delay_calc_->findDelays(drvr);
+        }        
 
         float max_cap = INF;
         float max_fanout = INF;
@@ -334,8 +363,12 @@ RepairDesign::repairNet(Net *net,
           float cap1, max_cap1, cap_slack1;
           const Corner *corner1;
           const RiseFall *tr1;
-          sta_->checkCapacitance(drvr_pin, nullptr, max_,
-                                 corner1, tr1, cap1, max_cap1, cap_slack1);
+          {
+            ProfileTask task("repairNet: sta");
+            sta_->checkCapacitance(drvr_pin, nullptr, max_,
+                                   corner1, tr1, cap1, max_cap1, cap_slack1);
+          }
+          
           if (max_cap1 > 0.0 && corner1) {
             max_cap1 *= (1.0 - max_cap_margin / 100.0);
             max_cap = max_cap1;
@@ -348,8 +381,11 @@ RepairDesign::repairNet(Net *net,
         }
         if (check_fanout) {
           float fanout, fanout_slack;
-          sta_->checkFanout(drvr_pin, max_,
-                            fanout, max_fanout, fanout_slack);
+          {
+            ProfileTask task("repairNet: sta");
+            sta_->checkFanout(drvr_pin, max_,
+                              fanout, max_fanout, fanout_slack);
+          }
           if (max_fanout > 0.0 && fanout_slack < 0.0) {
             fanout_violations++;
             repair_fanout = true;
@@ -365,7 +401,10 @@ RepairDesign::repairNet(Net *net,
           float slew1, slew_slack1, max_slew1;
           const Corner *corner1;
           // Check slew at the driver.
-          checkSlew(drvr_pin, slew_margin, slew1, max_slew1, slew_slack1, corner1);
+          {
+            ProfileTask task("repairNet: sta");
+            checkSlew(drvr_pin, slew_margin, slew1, max_slew1, slew_slack1, corner1);
+          }
           // Max slew violations at the driver pin are repaired by reducing the
           // load capacitance. Wire resistance may shield capacitance from the
           // driver but so this is conservative.
@@ -392,8 +431,11 @@ RepairDesign::repairNet(Net *net,
           // input pins.
           // Max slew violations at the load pins are repaired by inserting buffers
           // and reducing the wire length to the load.
-          resizer_->checkLoadSlews(drvr_pin, slew_margin, slew1,
+          {
+            ProfileTask task("repairNet: checkLoadSlews");
+            resizer_->checkLoadSlews(drvr_pin, slew_margin, slew1,
                                    max_slew1, slew_slack1, corner1);
+          }
           if (slew_slack1 < 0.0) {
             debugPrint(logger_, RSZ, "repair_net", 2,
                        "load slew violation load_slew={} max_slew={}",
@@ -416,11 +458,14 @@ RepairDesign::repairNet(Net *net,
                      units_->distanceUnit()->asString(dbuToMeters(drvr_loc.getX()), 1),
                      units_->distanceUnit()->asString(dbuToMeters(drvr_loc.getY()), 1),
                      units_->distanceUnit()->asString(dbuToMeters(wire_length), 1));
+          ProfileTask task("repairNet: repairNet");
           repairNet(bnet, drvr_pin, max_cap, max_fanout, max_length, corner);
           repaired_net_count++;
 
-          if (resize_drvr)
+          if (resize_drvr) {
+            ProfileTask task("repairNet: rsz");
             resize_count_ += resizer_->resizeToTargetSlew(drvr_pin);
+          }
         }
       }
     }
