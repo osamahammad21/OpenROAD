@@ -190,7 +190,7 @@ int FlexDRWorker::main(frDesign* design)
     workerFile << workerStr;
     workerFile.close();
     std::ofstream file(
-        fmt::format("{}/globals.bin", debugSettings_->dumpDir).c_str());
+        fmt::format("{}/worker.globals", debugSettings_->dumpDir).c_str());
     frOArchive ar(file);
     registerTypes(ar);
     serializeGlobals(ar);
@@ -1805,16 +1805,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
         logger_->report("    {}.", t);
       }
     }
-  }
-  //write updates
-  serializeUpdates(design_->getUpdates(),"updates.bin");
-  design_->clearUpdates();
-  std::ofstream file("globals.bin");
-  frOArchive ar(file);
-  registerTypes(ar);
-  serializeGlobals(ar);
-  file.close();
-  
+  }  
   FlexDRConnectivityChecker checker(
       getDesign(),
       logger_,

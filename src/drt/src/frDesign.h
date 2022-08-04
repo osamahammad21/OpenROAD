@@ -56,6 +56,7 @@ class frDesign
         version_(0)
   {
   }
+  frDesign() : topBlock_(nullptr), tech_(nullptr), rq_(nullptr) {}
   // getters
   frBlock* getTopBlock() const { return topBlock_.get(); }
   frTechObject* getTech() const { return tech_.get(); }
@@ -103,13 +104,9 @@ class frDesign
   void addUpdate(const drUpdate& update)
   {
     if (updates_.size() == 0)
-      updates_.resize(1);
-    if(updates_[0].size() == 263)
-    {
-      std::cout << "net " << update.getNet()->getName() << "\nNo. of guides " << update.getNet()->getGuides().size() << "\nGuide Index " << update.getIndexInOwner() << std::endl;
-    }
-    // auto num_batches = updates_.size();
-    updates_[0].push_back(update);
+      updates_.resize(MAX_THREADS * 2);
+    auto num_batches = updates_.size();
+    updates_[updates_sz_++ % num_batches].push_back(update);
   }
   const std::vector<std::vector<drUpdate>>& getUpdates() const
   {
