@@ -104,6 +104,10 @@ class frDesign
   {
     if (updates_.size() == 0)
       updates_.resize(1);
+    if(updates_[0].size() == 263)
+    {
+      std::cout << "net " << update.getNet()->getName() << "\nNo. of guides " << update.getNet()->getGuides().size() << "\nGuide Index " << update.getIndexInOwner() << std::endl;
+    }
     // auto num_batches = updates_.size();
     updates_[0].push_back(update);
   }

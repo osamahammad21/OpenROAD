@@ -28,6 +28,7 @@
 
 #include "distributed/drUpdate.h"
 #include "ta/FlexTA.h"
+#include <iostream>
 using namespace std;
 using namespace fr;
 
