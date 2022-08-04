@@ -625,6 +625,7 @@ void serializeGlobals(Archive& ar)
   (ar) & MTSAFEDIST;
   (ar) & DRCSAFEDIST;
   (ar) & VERBOSE;
+  (ar) & CLEAN_PATCHES;
   (ar) & BOTTOM_ROUTING_LAYER_NAME;
   (ar) & TOP_ROUTING_LAYER_NAME;
   (ar) & BOTTOM_ROUTING_LAYER;

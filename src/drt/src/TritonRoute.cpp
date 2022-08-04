@@ -743,6 +743,13 @@ void serializeUpdatess(const std::vector<std::vector<drUpdate>>& updates,
 
 int TritonRoute::main()
 {
+  if(debug_->debugDumpDR) {
+    std::ofstream file(fmt::format("{}/init.globals", debug_->dumpDir).c_str());
+    frOArchive ar(file);
+    registerTypes(ar);
+    serializeGlobals(ar);
+    file.close();
+  }
   MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
   if (distributed_ && !DO_PA) {
     asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this));
