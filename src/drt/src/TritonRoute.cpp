@@ -245,7 +245,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
              "End number of markers {}. Updated={}",
              worker->getBestNumMarkers(),
              updated);
-  if (updated)
+  if (updated && !drcRpt.empty())
     reportDRC(drcRpt, worker.get());
 }
 
@@ -733,6 +733,15 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path)
   design_->clearUpdates();
   design_->incrementVersion();
 }
+void serializeUpdatess(const std::vector<std::vector<drUpdate>>& updates,
+                             const std::string& file_name)
+{
+  std::ofstream file(file_name.c_str());
+  frOArchive ar(file);
+  registerTypes(ar);
+  ar << updates;
+  file.close();
+}
 
 int TritonRoute::main()
 {
@@ -752,8 +761,9 @@ int TritonRoute::main()
         asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this));
     }
   }
-  if (true) {
-    ord::OpenRoad::openRoad()->writeDb("pre_design.db");
+  if (debug_->debugDumpDR) {
+    ord::OpenRoad::openRoad()->writeDb(
+        fmt::format("{}/design.db", debug_->dumpDir).c_str());
   }
   if (!initGuide()) {
     gr();
@@ -765,6 +775,10 @@ int TritonRoute::main()
   }
   prep();
   ta();
+  if (debug_->debugDumpDR) {
+    serializeUpdatess(design_->getUpdates(), fmt::format("{}/updates.bin", debug_->dumpDir));
+  }
+  exit(0);
   if (distributed_) {
     asio::post(dist_pool_,
                boost::bind(&TritonRoute::sendDesignUpdates, this, ""));

@@ -330,7 +330,7 @@ proc detailed_route_run_worker { args } {
   if { [info exists keys(-drc_rpt)] } {
     set drc_rpt $keys(-drc_rpt)
   } else {
-    utl::error DRT 518 "-drc_rpt is required for detailed_route_run_worker command"
+    set drc_rpt ""
   }
   drt::run_worker_cmd  $dump_dir $drc_rpt
 }

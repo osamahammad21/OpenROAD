@@ -56,7 +56,6 @@ class frDesign
         version_(0)
   {
   }
-  frDesign() : topBlock_(nullptr), tech_(nullptr), rq_(nullptr) {}
   // getters
   frBlock* getTopBlock() const { return topBlock_.get(); }
   frTechObject* getTech() const { return tech_.get(); }
