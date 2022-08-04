@@ -103,9 +103,9 @@ class frDesign
   void addUpdate(const drUpdate& update)
   {
     if (updates_.size() == 0)
-      updates_.resize(MAX_THREADS * 2);
-    auto num_batches = updates_.size();
-    updates_[updates_sz_++ % num_batches].push_back(update);
+      updates_.resize(1);
+    // auto num_batches = updates_.size();
+    updates_[0].push_back(update);
   }
   const std::vector<std::vector<drUpdate>>& getUpdates() const
   {

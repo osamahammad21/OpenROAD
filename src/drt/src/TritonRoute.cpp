@@ -331,134 +331,132 @@ void TritonRoute::applyUpdates(
   auto regionQuery = design_->getRegionQuery();
   const auto maxSz = updates[0].size();
   for (int j = 0; j < maxSz; j++) {
-    for (int i = 0; i < updates.size(); i++) {
-      if (updates[i].size() <= j)
-        continue;
-      const auto& update = updates[i][j];
-      switch (update.getType()) {
-        case drUpdate::REMOVE_FROM_BLOCK: {
-          auto id = update.getIndexInOwner();
-          auto marker = design_->getTopBlock()->getMarker(id);
-          regionQuery->removeMarker(marker);
-          topBlock->removeMarker(marker);
-          break;
-        }
-        case drUpdate::REMOVE_FROM_NET:
-        case drUpdate::REMOVE_FROM_RQ: {
-          auto net = update.getNet();
-          auto id = update.getIndexInOwner();
-          auto pinfig = net->getPinFig(id);
-          switch (pinfig->typeId()) {
-            case frcPathSeg: {
-              auto seg = static_cast<frPathSeg*>(pinfig);
-              regionQuery->removeDRObj(seg);
-              if (update.getType() == drUpdate::REMOVE_FROM_NET)
-                net->removeShape(seg);
-              break;
-            }
-            case frcPatchWire: {
-              auto pwire = static_cast<frPatchWire*>(pinfig);
-              regionQuery->removeDRObj(pwire);
-              if (update.getType() == drUpdate::REMOVE_FROM_NET)
-                net->removePatchWire(pwire);
-              break;
-            }
-            case frcVia: {
-              auto via = static_cast<frVia*>(pinfig);
-              regionQuery->removeDRObj(via);
-              if (update.getType() == drUpdate::REMOVE_FROM_NET)
-                net->removeVia(via);
-              break;
-            }
-            default:
-              logger_->error(
-                  DRT, 9999, "unknown update type {}", pinfig->typeId());
-              break;
+    const auto& update = updates[0][j];
+    switch (update.getType()) {
+      case drUpdate::REMOVE_FROM_BLOCK: {
+        auto id = update.getIndexInOwner();
+        auto marker = design_->getTopBlock()->getMarker(id);
+        regionQuery->removeMarker(marker);
+        topBlock->removeMarker(marker);
+        break;
+      }
+      case drUpdate::REMOVE_FROM_NET:
+      case drUpdate::REMOVE_FROM_RQ: {
+        auto net = update.getNet();
+        auto id = update.getIndexInOwner();
+        auto pinfig = net->getPinFig(id);
+        switch (pinfig->typeId()) {
+          case frcPathSeg: {
+            auto seg = static_cast<frPathSeg*>(pinfig);
+            regionQuery->removeDRObj(seg);
+            if (update.getType() == drUpdate::REMOVE_FROM_NET)
+              net->removeShape(seg);
+            break;
           }
-          break;
-        }
-        case drUpdate::ADD_SHAPE:
-        case drUpdate::ADD_SHAPE_NET_ONLY: {
-          switch (update.getObjTypeId()) {
-            case frcPathSeg: {
-              auto net = update.getNet();
-              frPathSeg seg = update.getPathSeg();
-              std::unique_ptr<frShape> uShape
-                  = std::make_unique<frPathSeg>(seg);
-              auto sptr = uShape.get();
-              net->addShape(std::move(uShape));
-              if (update.getType() == drUpdate::ADD_SHAPE)
-                regionQuery->addDRObj(sptr);
-              break;
-            }
-            case frcPatchWire: {
-              auto net = update.getNet();
-              frPatchWire pwire = update.getPatchWire();
-              std::unique_ptr<frShape> uShape
-                  = std::make_unique<frPatchWire>(pwire);
-              auto sptr = uShape.get();
-              net->addPatchWire(std::move(uShape));
-              if (update.getType() == drUpdate::ADD_SHAPE)
-                regionQuery->addDRObj(sptr);
-              break;
-            }
-            case frcVia: {
-              auto net = update.getNet();
-              frVia via = update.getVia();
-              auto uVia = std::make_unique<frVia>(via);
-              auto sptr = uVia.get();
-              net->addVia(std::move(uVia));
-              if (update.getType() == drUpdate::ADD_SHAPE)
-                regionQuery->addDRObj(sptr);
-              break;
-            }
-            default: {
-              frMarker marker = update.getMarker();
-              auto uMarker = std::make_unique<frMarker>(marker);
-              auto sptr = uMarker.get();
-              topBlock->addMarker(std::move(uMarker));
-              regionQuery->addMarker(sptr);
-              break;
-            }
+          case frcPatchWire: {
+            auto pwire = static_cast<frPatchWire*>(pinfig);
+            regionQuery->removeDRObj(pwire);
+            if (update.getType() == drUpdate::REMOVE_FROM_NET)
+              net->removePatchWire(pwire);
+            break;
           }
-          break;
-        }
-        case drUpdate::ADD_GUIDE: {
-          frPathSeg seg = update.getPathSeg();
-          std::unique_ptr<frPathSeg> uSeg = std::make_unique<frPathSeg>(seg);
-          auto net = update.getNet();
-          uSeg->addToNet(net);
-          vector<unique_ptr<frConnFig>> tmp;
-          tmp.push_back(std::move(uSeg));
-          auto idx = update.getIndexInOwner();
-          if (idx < 0 || idx >= net->getGuides().size())
-            logger_->error(DRT,
-                           9199,
-                           "Guide {} out of range {}",
-                           idx,
-                           net->getGuides().size());
-          const auto& guide = net->getGuides().at(idx);
-          guide->setRoutes(tmp);
-          break;
-        }
-        case drUpdate::UPDATE_SHAPE: {
-          auto net = update.getNet();
-          auto id = update.getIndexInOwner();
-          auto pinfig = net->getPinFig(id);
-          switch (pinfig->typeId()) {
-            case frcPathSeg: {
-              auto seg = static_cast<frPathSeg*>(pinfig);
-              frPathSeg updatedSeg = update.getPathSeg();
-              seg->setPoints(updatedSeg.getBeginPoint(),
-                             updatedSeg.getEndPoint());
-              frSegStyle style = updatedSeg.getStyle();
-              seg->setStyle(style);
-              regionQuery->addDRObj(seg);
-              break;
-            }
-            default:
-              break;
+          case frcVia: {
+            auto via = static_cast<frVia*>(pinfig);
+            regionQuery->removeDRObj(via);
+            if (update.getType() == drUpdate::REMOVE_FROM_NET)
+              net->removeVia(via);
+            break;
           }
+          default:
+            logger_->error(
+                DRT, 9999, "unknown update type {}", pinfig->typeId());
+            break;
+        }
+        break;
+      }
+      case drUpdate::ADD_SHAPE:
+      case drUpdate::ADD_SHAPE_NET_ONLY: {
+        switch (update.getObjTypeId()) {
+          case frcPathSeg: {
+            auto net = update.getNet();
+            frPathSeg seg = update.getPathSeg();
+            std::unique_ptr<frShape> uShape
+                = std::make_unique<frPathSeg>(seg);
+            auto sptr = uShape.get();
+            net->addShape(std::move(uShape));
+            if (update.getType() == drUpdate::ADD_SHAPE)
+              regionQuery->addDRObj(sptr);
+            break;
+          }
+          case frcPatchWire: {
+            auto net = update.getNet();
+            frPatchWire pwire = update.getPatchWire();
+            std::unique_ptr<frShape> uShape
+                = std::make_unique<frPatchWire>(pwire);
+            auto sptr = uShape.get();
+            net->addPatchWire(std::move(uShape));
+            if (update.getType() == drUpdate::ADD_SHAPE)
+              regionQuery->addDRObj(sptr);
+            break;
+          }
+          case frcVia: {
+            auto net = update.getNet();
+            frVia via = update.getVia();
+            auto uVia = std::make_unique<frVia>(via);
+            auto sptr = uVia.get();
+            net->addVia(std::move(uVia));
+            if (update.getType() == drUpdate::ADD_SHAPE)
+              regionQuery->addDRObj(sptr);
+            break;
+          }
+          default: {
+            frMarker marker = update.getMarker();
+            auto uMarker = std::make_unique<frMarker>(marker);
+            auto sptr = uMarker.get();
+            topBlock->addMarker(std::move(uMarker));
+            regionQuery->addMarker(sptr);
+            break;
+          }
+        }
+        break;
+      }
+      case drUpdate::ADD_GUIDE: {
+        frPathSeg seg = update.getPathSeg();
+        std::unique_ptr<frPathSeg> uSeg = std::make_unique<frPathSeg>(seg);
+        auto net = update.getNet();
+        uSeg->addToNet(net);
+        vector<unique_ptr<frConnFig>> tmp;
+        tmp.push_back(std::move(uSeg));
+        auto idx = update.getIndexInOwner();
+        if (idx < 0 || idx >= net->getGuides().size())
+          logger_->error(DRT,
+                          9199,
+                          "Update no. {} Net {} Guide {} out of range {}",
+                          j,
+                          net->getName(),
+                          idx,
+                          net->getGuides().size());
+        const auto& guide = net->getGuides().at(idx);
+        guide->setRoutes(tmp);
+        break;
+      }
+      case drUpdate::UPDATE_SHAPE: {
+        auto net = update.getNet();
+        auto id = update.getIndexInOwner();
+        auto pinfig = net->getPinFig(id);
+        switch (pinfig->typeId()) {
+          case frcPathSeg: {
+            auto seg = static_cast<frPathSeg*>(pinfig);
+            frPathSeg updatedSeg = update.getPathSeg();
+            seg->setPoints(updatedSeg.getBeginPoint(),
+                            updatedSeg.getEndPoint());
+            frSegStyle style = updatedSeg.getStyle();
+            seg->setStyle(style);
+            regionQuery->addDRObj(seg);
+            break;
+          }
+          default:
+            break;
         }
       }
     }
