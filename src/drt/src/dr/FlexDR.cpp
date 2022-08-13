@@ -176,24 +176,24 @@ int FlexDRWorker::main(frDesign* design)
     skipRouting_ = true;
   }
   if (debugSettings_->debugDumpDR
-      && routeBox_.intersects({debugSettings_->x, debugSettings_->y})
       && debugSettings_->iter == getDRIter()) {
+    std::string workerDir = fmt::format("{}/worker{}x_{}y",debugSettings_->dumpDir, getRouteBox().xMin(), getRouteBox().yMin());
+    mkdir(workerDir.c_str(),0777);
     serializeUpdates(design_->getUpdates(),
-                     fmt::format("{}/updates.bin", debugSettings_->dumpDir));
-    design_->clearUpdates();
+                     fmt::format("{}/updates.bin", workerDir));
     std::string viaDataStr;
     serializeViaData(*via_data_, viaDataStr);
     ofstream viaDataFile(
-        fmt::format("{}/viadata.bin", debugSettings_->dumpDir).c_str());
+        fmt::format("{}/viadata.bin", workerDir).c_str());
     viaDataFile << viaDataStr;
     std::string workerStr;
     serializeWorker(this, workerStr);
     ofstream workerFile(
-        fmt::format("{}/worker.bin", debugSettings_->dumpDir).c_str());
+        fmt::format("{}/worker.bin", workerDir).c_str());
     workerFile << workerStr;
     workerFile.close();
     std::ofstream file(
-        fmt::format("{}/globals.bin", debugSettings_->dumpDir).c_str());
+        fmt::format("{}/globals.bin", workerDir).c_str());
     frOArchive ar(file);
     registerTypes(ar);
     serializeGlobals(ar);
@@ -1692,6 +1692,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
   int version = 0;
   increaseClipsize_ = false;
   numWorkUnits_ = 0;
+  int totalNumWorkUnits_ = 0;
   // parallel execution
   for (auto& workerBatch : workers) {
     ProfileTask profile("DR:checkerboard");
@@ -1782,6 +1783,8 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
         ProfileTask profile("DR:end_batch");
         // single thread
         for (int i = 0; i < (int) workersInBatch.size(); i++) {
+          if (!workersInBatch[i]->isSkipRouting())
+            totalNumWorkUnits_++; 
           if (workersInBatch[i]->end(getDesign()))
             numWorkUnits_ += 1;
           if (workersInBatch[i]->isCongested())
@@ -1821,8 +1824,9 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
              utl::DRT,
              "workers",
              1,
-             "Number of work units = {}.",
-             numWorkUnits_);
+             "Number of work units = {}/{}",
+             numWorkUnits_,
+             totalNumWorkUnits_);
   if (VERBOSE > 0) {
     logger_->info(DRT,
                   199,
