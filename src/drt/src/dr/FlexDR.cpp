@@ -193,7 +193,7 @@ int FlexDRWorker::main(frDesign* design)
     workerFile << workerStr;
     workerFile.close();
     std::ofstream file(
-        fmt::format("{}/globals.bin", workerDir).c_str());
+        fmt::format("{}/worker_globals.bin", workerDir).c_str());
     frOArchive ar(file);
     registerTypes(ar);
     serializeGlobals(ar);

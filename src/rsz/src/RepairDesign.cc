@@ -944,7 +944,9 @@ void
 RepairDesign::subdivideRegion(LoadRegion &region,
                               int max_fanout)
 {
-  if (region.pins_.size() > max_fanout) {
+  if (region.pins_.size() > max_fanout
+      && region.bbox_.dx() > dbu_
+      && region.bbox_.dy() > dbu_) {
     int x_min = region.bbox_.xMin();
     int x_max = region.bbox_.xMax();
     int y_min = region.bbox_.yMin();
@@ -1381,7 +1383,10 @@ FanoutRender::FanoutRender(RepairDesign *repair) :
   repair_(repair),
   pins_(nullptr)
 {
-  gui::Gui::get()->registerRenderer(this);
+  const bool gui_enabled = gui::Gui::enabled();
+  if (gui_enabled) {
+    gui::Gui::get()->registerRenderer(this);
+  }
 }
 
 void
