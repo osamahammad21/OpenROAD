@@ -55,6 +55,8 @@
 #include "sta/StaMain.hh"
 #include "stt/SteinerTreeBuilder.h"
 #include "ta/FlexTA.h"
+#include <filesystem>
+namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
 using namespace triton_route;
@@ -247,6 +249,41 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   if (updated)
     reportDRC(
         drcRpt, design_->getTopBlock()->getMarkers(), worker->getDrcBox());
+}
+
+void TritonRoute::test()
+{
+  std::vector<std::string> active;
+  for (const auto & entry : fs::directory_iterator("/home/oreheem/OpenROAD-flow-scripts/flow/DUMP"))
+  {
+    if(!entry.is_directory())
+      continue;
+    std::string dump_dir = entry.path();
+    updateGlobals(fmt::format("{}/init_globals.bin", dump_dir).c_str());
+    resetDb(fmt::format("{}/design.odb", dump_dir).c_str());
+    updateGlobals(fmt::format("{}/globals.bin", dump_dir).c_str());
+    updateDesign(fmt::format("{}/updates.bin", dump_dir).c_str());
+    updateGlobals(fmt::format("{}/worker_globals.bin", dump_dir).c_str());
+    FlexDRViaData viaData;
+    std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dump_dir),
+                              std::ios::binary);
+    frIArchive ar(viaDataFile);
+    ar >> viaData;
+    std::ifstream workerFile(fmt::format("{}/worker.bin", dump_dir),
+                           std::ios::binary);
+    std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
+                          std::istreambuf_iterator<char>());
+    workerFile.close();
+    auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+    if(!worker->isSkipRouting())
+    {
+      active.push_back(dump_dir);
+    }
+  }
+  for(auto path : active)
+  {
+    std::cout << path << std::endl;
+  }
 }
 
 void TritonRoute::updateGlobals(const char* file_name)
