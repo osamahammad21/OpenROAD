@@ -112,6 +112,32 @@ class FlexDR
     frUInt4 workerMarkerCost;
     int ripupMode;
     bool followGuide;
+    bool operator==(const SearchRepairArgs& rhs)
+    {
+      return size==rhs.size &&
+             offset==rhs.offset &&
+             mazeEndIter==rhs.mazeEndIter &&
+             workerDRCCost==rhs.workerDRCCost &&
+             workerMarkerCost==rhs.workerMarkerCost &&
+             ripupMode==rhs.ripupMode &&
+             followGuide==rhs.followGuide;
+    }
+    bool operator<(const SearchRepairArgs& rhs) const
+    {
+      if(size != rhs.size)
+        return size < rhs.size;
+      if(offset != rhs.offset)
+        return offset < rhs.offset;
+      if(workerDRCCost != rhs.workerDRCCost)
+        return workerDRCCost < rhs.workerDRCCost;
+      if(workerMarkerCost != rhs.workerMarkerCost)
+        return workerMarkerCost < rhs.workerMarkerCost;
+      if(ripupMode != rhs.ripupMode)
+        return ripupMode < rhs.ripupMode;
+      if(followGuide != rhs.followGuide)
+        return followGuide == false;
+      return false;
+    }
   };
 
   // constructors
