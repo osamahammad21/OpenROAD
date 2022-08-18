@@ -136,6 +136,7 @@ class TritonRoute
                             int followGuide);
   void setDistributed(bool on = true);
   void setWorkerIpPort(const char* ip, unsigned short port);
+  void setLocalIpPort(const char* ip, unsigned short port);
   void setSharedVolume(const std::string& vol);
   void setCloudSize(unsigned int cloud_sz) { cloud_sz_ = cloud_sz; }
   unsigned int getCloudSize() const { return cloud_sz_; }
@@ -191,6 +192,8 @@ class TritonRoute
   bool distributed_;
   std::string dist_ip_;
   unsigned short dist_port_;
+  std::string local_ip_;
+  unsigned short local_port_;
   std::string shared_volume_;
   std::vector<std::pair<int, std::string>> workers_results_;
   std::vector<std::pair<int, int>> stubborn_results_;

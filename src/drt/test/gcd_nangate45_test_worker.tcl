@@ -10,5 +10,7 @@ detailed_route_run_worker -dump_dir results/worker0x_0y/ \
                           -distributed \
                           -remote_host 127.0.0.1 \
                           -remote_port 1234 \
+                          -local_host 127.0.0.1 \
+                          -local_port 7777 \
                           -cloud_size 3 \
                           -shared_volume results/shared_volume/

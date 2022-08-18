@@ -119,6 +119,12 @@ void TritonRoute::setWorkerIpPort(const char* ip, unsigned short port)
   dist_port_ = port;
 }
 
+void TritonRoute::setLocalIpPort(const char* ip, unsigned short port)
+{
+  local_ip_ = ip;
+  local_port_ = port;
+}
+
 void TritonRoute::setSharedVolume(const std::string& vol)
 {
   shared_volume_ = vol;
@@ -260,7 +266,7 @@ void TritonRoute::sendWorkers(const std::vector<std::unique_ptr<FlexDRWorker>>& 
     MLJobDescription* rjd
         = static_cast<MLJobDescription*>(desc.get());
     rjd->setWorkers(workers);
-    rjd->setReplyPort(8891);
+    rjd->setReplyPort(local_port_);
     msg.setJobDescription(std::move(desc));
     bool ok = dist_->sendJob(msg, remote_ip.c_str(), remote_port, result);
     if (!ok) {
@@ -327,7 +333,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::mutex mtx;
   std::vector<FlexDR::SearchRepairArgs> strategies;
   std::vector<std::unique_ptr<FlexDRWorker>> workers;
-  dist_->runWorker("127.0.0.1", 8891, true);
+  dist_->runWorker(local_ip_.c_str(), local_port_, true);
   for(auto mazeEndIter : {3, 8 ,16, 32, 64})
   {
     for(auto markerCost : {2, 4, 8, 16, 32, 64})
