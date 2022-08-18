@@ -84,7 +84,8 @@ void WorkerConnection::handle_read(boost::system::error_code const& err,
       return;
     }
     switch (msg_.getJobType()) {
-      case JobMessage::ROUTING:
+      case JobMessage::ROUTING_INITIAL:
+      case JobMessage::ROUTING_STUBBORN:
         for (auto& cb : dist_->getCallBacks()) {
           cb->onRoutingJobReceived(msg_, sock_);
         }
@@ -92,6 +93,12 @@ void WorkerConnection::handle_read(boost::system::error_code const& err,
       case JobMessage::UPDATE_DESIGN: {
         for (auto& cb : dist_->getCallBacks()) {
           cb->onFrDesignUpdated(msg_, sock_);
+        }
+        break;
+      }
+      case JobMessage::ROUTING_STUBBORN_RESULT: {
+        for (auto& cb : dist_->getCallBacks()) {
+          cb->onRoutingStubbornResultReceived(msg_, sock_);
         }
         break;
       }

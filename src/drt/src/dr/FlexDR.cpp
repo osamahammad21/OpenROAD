@@ -43,6 +43,7 @@
 
 #include "db/infra/frTime.h"
 #include "distributed/RoutingJobDescription.h"
+#include "distributed/MLJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR_conn.h"
 #include "dr/FlexDR_graphics.h"
@@ -61,6 +62,8 @@ using namespace fr;
 using utl::ThreadException;
 
 BOOST_CLASS_EXPORT(RoutingJobDescription)
+BOOST_CLASS_EXPORT(MLJobDescription)
+
 
 enum class SerializationType
 {
@@ -131,18 +134,15 @@ void FlexDR::setDebug(frDebugSettings* settings)
             : nullptr;
 }
 
-std::string FlexDRWorker::reloadedMain()
+void FlexDRWorker::reloadedMain()
 {
   init(design_);
-  // debugPrint(logger_,
-  //            utl::DRT,
-  //            "autotuner",
-  //            1,
-  //            "Init number of markers {}",
-  //            getInitNumMarkers());
   route_queue();
   setGCWorker(nullptr);
   cleanup();
+}
+std::string FlexDRWorker::getSerializedWorker()
+{
   std::string workerStr;
   serializeWorker(this, workerStr);
   return workerStr;
@@ -2287,7 +2287,7 @@ void FlexDR::sendWorkers(
     }
   }
   {
-    dst::JobMessage msg(dst::JobMessage::ROUTING),
+    dst::JobMessage msg(dst::JobMessage::ROUTING_INITIAL),
         result(dst::JobMessage::NONE);
     std::unique_ptr<dst::JobDescription> desc
         = std::make_unique<RoutingJobDescription>();

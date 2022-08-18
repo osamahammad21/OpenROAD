@@ -151,6 +151,8 @@ class TritonRoute
   // for debugging and not general usage.
   std::string runDRWorker(const std::string& workerStr,
                           fr::FlexDRViaData* viaData);
+  int runDRWorkerGetViolNum(const std::string& workerStr,
+                            fr::FlexDRViaData* viaData);
   void debugSingleWorker(const std::string& dumpDir, const std::string& drcRpt);
   void updateGlobals(const char* file_name);
   void resetDb(const char* file_name);
@@ -158,11 +160,14 @@ class TritonRoute
   void updateDesign(const std::string& updates);
   void addWorkerResults(
       const std::vector<std::pair<int, std::string>>& results);
+  void addWorkerResults(
+      const std::vector<std::pair<int, int>>& results);
   bool getWorkerResults(std::vector<std::pair<int, std::string>>& results);
+  bool getWorkerResults(std::vector<std::pair<int, int>>& results);
   int getWorkerResultsSize();
-  void sendDesignDist();
+  void sendDesignDist(bool writeFiles = true);
   bool writeGlobals(const std::string& name);
-  void sendDesignUpdates(const std::string& globals_path);
+  void sendDesignUpdates(const std::string& globals_path, bool writeFiles = true);
   void sendGlobalsUpdates(const std::string& globals_path,
                           const std::string& serializedViaData);
   void setGuideFile(const std::string& guide_path);
@@ -188,6 +193,7 @@ class TritonRoute
   unsigned short dist_port_;
   std::string shared_volume_;
   std::vector<std::pair<int, std::string>> workers_results_;
+  std::vector<std::pair<int, int>> stubborn_results_;
   std::mutex results_mutex_;
   int results_sz_;
   unsigned int cloud_sz_;
@@ -200,6 +206,7 @@ class TritonRoute
   void ta();
   void dr();
   void applyUpdates(const std::vector<std::vector<fr::drUpdate>>& updates);
+  void sendWorkers(const std::vector<std::unique_ptr<fr::FlexDRWorker>>& workers, int begin, int size);
   friend class fr::FlexDR;
 };
 }  // namespace triton_route

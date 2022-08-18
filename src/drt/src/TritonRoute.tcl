@@ -311,30 +311,6 @@ proc pin_access { args } {
   drt::pin_access_cmd $db_process_node $bottom_routing_layer $top_routing_layer $verbose $min_access_points
 }
 
-sta::define_cmd_args "detailed_route_run_worker" {
-    [-dump_dir dir]
-    [-drc_rpt drc]
-}
-
-proc detailed_route_run_worker { args } {
-  sta::parse_key_args "detailed_route_run_worker" args \
-      keys {-dump_dir -drc_rpt} \
-      flags {}
-  sta::check_argc_eq0 "detailed_route_run_worker" $args
-  if { [info exists keys(-dump_dir)] } {
-    set dump_dir $keys(-dump_dir)
-  } else {
-    utl::error DRT 517 "-dump_dir is required for detailed_route_run_worker command"
-  }
-
-  if { [info exists keys(-drc_rpt)] } {
-    set drc_rpt $keys(-drc_rpt)
-  } else {
-    set drc_rpt ""
-  }
-  drt::run_worker_cmd  $dump_dir $drc_rpt
-}
-
 sta::define_cmd_args "detailed_route_worker_debug" {
     [-maze_end_iter iter]
     [-drc_cost d_cost]
@@ -384,6 +360,49 @@ proc detailed_route_set_default_via { args } {
   drt::detailed_route_set_default_via $args
 }
 
+
+proc detailed_route_run_worker { args } {
+  sta::parse_key_args "detailed_route_run_worker" args \
+      keys {-dump_dir -drc_rpt  -remote_host -remote_port -shared_volume -cloud_size} \
+      flags {-distributed}
+  sta::check_argc_eq0 "detailed_route_run_worker" $args
+  if { [info exists keys(-dump_dir)] } {
+    set dump_dir $keys(-dump_dir)
+  } else {
+    utl::error DRT 524 "-dump_dir is required for detailed_route_run_worker command"
+  }
+
+  if { [info exists keys(-drc_rpt)] } {
+    set drc_rpt $keys(-drc_rpt)
+  } else {
+    set drc_rpt ""
+  }
+  if { [info exists flags(-distributed)] } {
+    if { [info exists keys(-remote_host)] } {
+      set rhost $keys(-remote_host)
+    } else {
+      utl::error DRT 520 "-remote_host is required for distributed routing."
+    }
+    if { [info exists keys(-remote_port)] } {
+      set rport $keys(-remote_port)
+    } else {
+      utl::error DRT 521 "-remote_port is required for distributed routing."
+    }
+    if { [info exists keys(-shared_volume)] } {
+      set vol $keys(-shared_volume)
+    } else {
+      utl::error DRT 522 "-shared_volume is required for distributed routing."
+    }
+    if { [info exists keys(-cloud_size)] } {
+      set cloudsz $keys(-cloud_size)
+    } else {
+      utl::error DRT 523 "-cloud_size is required for distributed routing."
+    }
+    drt::detailed_route_distributed $rhost $rport $vol $cloudsz
+  }
+  drt::run_worker_cmd  $dump_dir $drc_rpt
+}
+
 namespace eval drt {
 
 proc step_dr { args } {
@@ -419,4 +438,5 @@ proc check_drc { args } {
   }
   drt::check_drc $output_file $x1 $y1 $x2 $y2
 }
+
 }

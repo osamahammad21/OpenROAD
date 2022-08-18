@@ -56,6 +56,8 @@
 #include "stt/SteinerTreeBuilder.h"
 #include "ta/FlexTA.h"
 #include <filesystem>
+#include "dst/BalancerJobDescription.h"
+#include "distributed/MLJobDescription.h"
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
@@ -197,29 +199,112 @@ std::string TritonRoute::runDRWorker(const std::string& workerStr,
   worker->setDebugSettings(debug_.get());
   if (graphics_)
     graphics_->startIter(worker->getDRIter());
-  std::string result = worker->reloadedMain();
+  worker->reloadedMain();
+  std::string result = worker->getSerializedWorker();
   return result;
 }
-static std::vector<FlexDR::SearchRepairArgs> strategy()
-{
-  const fr::frUInt4 shapeCost = ROUTESHAPECOST;
 
-  return {/*  0 */ {7, 0, 3, shapeCost, 0 /*MARKERCOST*/, 1, true},
-          /*  1 */ {7, -2, 3, shapeCost, shapeCost, 1, true},
-          /*  3 */ {7, 0, 8, shapeCost, MARKERCOST, 0, false},
-          /* 16 */ {7, -6, 8, shapeCost * 2, MARKERCOST, 0, false},
-          /* 24 */ {7, -6, 8, shapeCost * 4, MARKERCOST, 0, false},
-          /* 32 */ {7, -6, 8, shapeCost * 8, MARKERCOST * 2, 0, false},
-          /* 40 */ {7, -6, 8, shapeCost * 16, MARKERCOST * 4, 0, false},
-          /* 48 */ {7, -6, 16, shapeCost * 16, MARKERCOST * 4, 0, false},
-          /* 56 */ {7, -6, 32, shapeCost * 32, MARKERCOST * 8, 0, false},
-          /* 57 */ {3, -1, 8, shapeCost, MARKERCOST, 1, false},
-          /* 63 */ {7, -6, 64, shapeCost * 64, MARKERCOST * 16, 0, false}};
+int TritonRoute::runDRWorkerGetViolNum(const std::string& workerStr,
+                                       FlexDRViaData* viaData)
+{
+  auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+  worker->setViaData(viaData);
+  worker->setSharedVolume(shared_volume_);
+  worker->setDebugSettings(debug_.get());
+  worker->reloadedMain();
+  return worker->getBestNumMarkers();
+}
+
+void serializeWorkerTR(FlexDRWorker* worker, std::string& workerStr)
+{
+  std::stringstream stream(std::ios_base::binary | std::ios_base::in
+                           | std::ios_base::out);
+  frOArchive ar(stream);
+  registerTypes(ar);
+  ar << *worker;
+  workerStr = stream.str();
+}
+
+void TritonRoute::sendWorkers(const std::vector<std::unique_ptr<FlexDRWorker>>& uWorkers, int begin, int size)
+{
+  std::vector<std::pair<int, std::string>> workers;
+  {
+    for (int i = begin; i < begin+size && i < uWorkers.size(); i++)
+    {
+      std::string workerStr;
+      serializeWorkerTR(uWorkers.at(i).get(), workerStr);
+      workers.push_back({i, workerStr});
+    }
+  }
+  std::string remote_ip = dist_ip_;
+  unsigned short remote_port = dist_port_;
+  if (getCloudSize() > 1) {
+    dst::JobMessage msg(dst::JobMessage::BALANCER),
+        result(dst::JobMessage::NONE);
+    bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+    if (!ok) {
+      logger_->error(utl::DRT, 6002, "Balancer failed");
+    } else {
+      dst::BalancerJobDescription* desc
+          = static_cast<dst::BalancerJobDescription*>(
+              result.getJobDescription());
+      remote_ip = desc->getWorkerIP();
+      remote_port = desc->getWorkerPort();
+    }
+  }
+  {
+    dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN),
+        result(dst::JobMessage::NONE);
+    std::unique_ptr<MLJobDescription> desc
+        = std::make_unique<MLJobDescription>();
+    MLJobDescription* rjd
+        = static_cast<MLJobDescription*>(desc.get());
+    rjd->setWorkers(workers);
+    rjd->setReplyPort(8891);
+    msg.setJobDescription(std::move(desc));
+    bool ok = dist_->sendJob(msg, remote_ip.c_str(), remote_port, result);
+    if (!ok) {
+      logger_->error(utl::DRT, 6501, "Sending worker {} failed");
+    }
+  }
+}
+
+static inline void copyFile(const char* srcPath, const char* dstPath)
+{
+  std::ifstream src(srcPath, std::ios::binary);
+  std::ofstream dst(dstPath, std::ios::binary);
+  dst << src.rdbuf();
+  src.close();
+  dst.close();
 }
 
 void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                                     const std::string& drcRpt)
 {
+  if (distributed_) {
+    copyFile(fmt::format("{}/init_globals.bin", dumpDir).c_str(), fmt::format("{}DESIGN.globals", shared_volume_).c_str());
+    copyFile(fmt::format("{}/design.odb", dumpDir).c_str(), fmt::format("{}DESIGN.db", shared_volume_).c_str());
+    asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this, false));
+  }
+  updateGlobals(fmt::format("{}/init_globals.bin", dumpDir).c_str());
+  resetDb(fmt::format("{}/design.odb", dumpDir).c_str());
+  
+  if (distributed_) {
+    copyFile(fmt::format("{}/updates.bin", dumpDir).c_str(), fmt::format("{}updates.bin", shared_volume_).c_str());
+    asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignUpdates, this, "", false));
+  }
+  updateDesign(fmt::format("{}/updates.bin", dumpDir).c_str());
+  if (distributed_) {
+    copyFile(fmt::format("{}/worker_globals.bin", dumpDir).c_str(), fmt::format("{}worker_globals.bin", shared_volume_).c_str());
+    std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dumpDir),
+                              std::ios::binary);
+    std::string serialViaData((std::istreambuf_iterator<char>(viaDataFile)),
+                               std::istreambuf_iterator<char>());
+    viaDataFile.close();
+    asio::post(dist_pool_, boost::bind(&TritonRoute::sendGlobalsUpdates, this, fmt::format("{}worker_globals.bin", shared_volume_).c_str(), serialViaData));
+  }
+  updateGlobals(fmt::format("{}/worker_globals.bin", dumpDir).c_str());
+
   bool on = debug_->debugDR;
   FlexDRViaData viaData;
   std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dumpDir),
@@ -236,13 +321,13 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
                         std::istreambuf_iterator<char>());
   workerFile.close();
-  // std::map<FlexDR::SearchRepairArgs, int> argsMap;
   std::map<std::tuple<int, int, int, int, bool>, int> argsMap;
   MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
   omp_set_num_threads(MAX_THREADS);
   std::mutex mtx;
-  // FIXEDSHAPECOST = 3 * ROUTESHAPECOST;
   std::vector<FlexDR::SearchRepairArgs> strategies;
+  std::vector<std::unique_ptr<FlexDRWorker>> workers;
+  dist_->runWorker("127.0.0.1", 8891, true);
   for(auto mazeEndIter : {3, 8 ,16, 32, 64})
   {
     for(auto markerCost : {2, 4, 8, 16, 32, 64})
@@ -251,62 +336,70 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
       {
         for(auto followGuide : {true, false})
         {
-          for(auto ripupMode : {0, 1})
-          {
-            strategies.push_back({7, 0, mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, ripupMode, followGuide});
-          }
+          if(mazeEndIter > 3)
+            continue;
+          FlexDR::SearchRepairArgs args = {7, 0, mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
+          strategies.push_back(args);
+          auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get()); 
+          worker->setMazeEndIter(args.mazeEndIter);
+          worker->setMarkerCost(args.workerMarkerCost);
+          worker->setDrcCost(args.workerDRCCost);
+          worker->setRipupMode(args.ripupMode);
+          worker->setFollowGuide((args.followGuide));
+          worker->setSharedVolume(shared_volume_);
+          worker->setDebugSettings(debug_.get());
+          worker->setViaData(&viaData);
+          workers.push_back(std::move(worker));
         }
       }
     }
   }
-  // auto strategies = strategy();
-  logger_->report("Trying {} strategies", strategies.size());
+  int size = workers.size();
+  logger_->report("Trying {} strategies", size);
+  int batchSize = size / getCloudSize();
   #pragma omp parallel for schedule(dynamic)
-  for(int i = 0; i < strategies.size(); i++)
+  for(int i = 0; i < size; i += batchSize)
   {
-    const auto& args = strategies[i];
-    auto argsTuple = std::make_tuple(args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.ripupMode, args.followGuide);
-    // {
-    //   std::unique_lock lock(mtx);
-    //   if(argsMap.find(argsTuple) != argsMap.end())
-    //     continue;
-    //   else
-    //     argsMap[argsTuple] = 100;
-    // }
-    auto worker
-        = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
-    worker->setMazeEndIter(args.mazeEndIter);
-    worker->setMarkerCost(args.workerMarkerCost);
-    worker->setDrcCost(args.workerDRCCost);
-    worker->setRipupMode(args.ripupMode);
-    worker->setFollowGuide((args.followGuide));
-    worker->setSharedVolume(shared_volume_);
-    worker->setDebugSettings(debug_.get());
-    worker->setViaData(&viaData);
-    // if (graphics_)
-    //   graphics_->startIter(worker->getDRIter());
-    
-    std::string result = worker->reloadedMain();
-    #pragma omp critical
+    sendWorkers(workers, i, batchSize);
+  }
+  int remaining = size;
+  while(remaining)
+  {
+    std::vector<std::pair<int, int>> results;
+    if(!getWorkerResults(results))
     {
-      // std::unique_lock lock(mtx);
-      argsMap[argsTuple] = worker->getBestNumMarkers();
+      sleep(1);
+      continue;
+    }
+    remaining -= results.size();
+    for(auto [i, numViolations] : results)
+    {
+      auto args = strategies[i];
       debugPrint(logger_,
-               utl::DRT,
-               "autotuner",
-               1,
-               "{}_{}_{}_{}_{} Number of markers {}",
-               args.mazeEndIter,
-               args.workerDRCCost,
-               args.workerMarkerCost,
-               args.ripupMode,
-               args.followGuide,
-               worker->getBestNumMarkers());
+                utl::DRT,
+                "autotuner",
+                1,
+                "{}_{}_{}_{}_{} Number of markers {}",
+                args.mazeEndIter,
+                args.workerDRCCost,
+                args.workerMarkerCost,
+                args.ripupMode,
+                args.followGuide,
+                numViolations);
     }
   }
-  // for(auto [args, numMarkers] : argsMap)
+  //#pragma omp parallel for schedule(dynamic)
+  // for(int i = 0; i < workers.size(); i++)
   // {
-  //   debugPrint(logger_,
+  //   const auto& args = strategies[i];
+  //   auto argsTuple = std::make_tuple(args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.ripupMode, args.followGuide);
+  //   auto& worker = workers[i];
+  //   worker->reloadedMain();
+  //   #pragma omp critical
+  //   {
+  //     // std::unique_lock lock(mtx);
+  //     argsMap[argsTuple] = worker->getBestNumMarkers();
+  //     debugPrint(logger_,
   //              utl::DRT,
   //              "autotuner",
   //              1,
@@ -316,75 +409,10 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   //              args.workerMarkerCost,
   //              args.ripupMode,
   //              args.followGuide,
-  //              numMarkers);
-  // }
-
-  // for(auto mazeEndIter : {8 ,16, 32, 64})
-  // {
-  //   for(auto markerCost : {2, 4, 8, 16, 32, 64})
-  //   {
-  //     for(auto drcCost : {2, 4, 8, 16, 32, 64})
-  //     {
-  //       for(auto followGuide : {true, false})
-  //       {
-  //         for(auto ripupMode : {0, 1})
-  //         {
-  //           auto worker
-  //               = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
-  //           worker->setMazeEndIter(mazeEndIter);
-  //           worker->setMarkerCost(markerCost * MARKERCOST);
-  //           worker->setDrcCost(drcCost * ROUTESHAPECOST);
-  //           worker->setRipupMode(ripupMode);
-  //           worker->setFollowGuide((followGuide));
-  //           worker->setSharedVolume(shared_volume_);
-  //           worker->setDebugSettings(debug_.get());
-  //           worker->setViaData(&viaData);
-  //           // if (graphics_)
-  //           //   graphics_->startIter(worker->getDRIter());
-            
-  //           std::string result = worker->reloadedMain();
-  //           bool updated = worker->end(design_.get());
-  //           debugPrint(logger_,
-  //                     utl::DRT,
-  //                     "autotuner",
-  //                     1,
-  //                     "End number of markers {}.",
-  //                     worker->getBestNumMarkers(),
-  //                     updated);
-  //         }
-  //       }
-  //     }
+  //              worker->getBestNumMarkers());
   //   }
+  //   break;
   // }
-  // auto worker
-  //     = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get());
-  // if (debug_->mazeEndIter != -1)
-  //   worker->setMazeEndIter(debug_->mazeEndIter);
-  // if (debug_->markerCost != -1)
-  //   worker->setMarkerCost(debug_->markerCost);
-  // if (debug_->drcCost != -1)
-  //   worker->setDrcCost(debug_->drcCost);
-  // if (debug_->ripupMode != -1)
-  //   worker->setRipupMode(debug_->ripupMode);
-  // if (debug_->followGuide != -1)
-  //   worker->setFollowGuide((debug_->followGuide == 1));
-  // worker->setSharedVolume(shared_volume_);
-  // worker->setDebugSettings(debug_.get());
-  // worker->setViaData(&viaData);
-  // if (graphics_)
-  //   graphics_->startIter(worker->getDRIter());
-  
-  // std::string result = worker->reloadedMain();
-  // bool updated = worker->end(design_.get());
-  // debugPrint(logger_,
-  //            utl::DRT,
-  //            "autotuner",
-  //            1,
-  //            "End number of markers {}. Updated={}",
-  //            worker->getBestNumMarkers(),
-  //            updated);
-  // if (updated)
-  //   reportDRC(drcRpt, worker.get());
 }
 
 void TritonRoute::test()
@@ -654,6 +682,7 @@ bool TritonRoute::initGuide()
   parser.initRPin();
   return guideOk;
 }
+
 void TritonRoute::initDesign()
 {
   if (getDesign()->getTopBlock() != nullptr) {
@@ -795,13 +824,16 @@ bool TritonRoute::writeGlobals(const std::string& name)
   return true;
 }
 
-void TritonRoute::sendDesignDist()
+void TritonRoute::sendDesignDist(bool writeFiles)
 {
   if (distributed_) {
     std::string design_path = fmt::format("{}DESIGN.db", shared_volume_);
     std::string globals_path = fmt::format("{}DESIGN.globals", shared_volume_);
-    ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
-    writeGlobals(globals_path.c_str());
+    if(writeFiles)
+    {
+      ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
+      writeGlobals(globals_path.c_str());
+    }
     dst::JobMessage msg(dst::JobMessage::UPDATE_DESIGN,
                         dst::JobMessage::BROADCAST),
         result(dst::JobMessage::NONE);
@@ -820,6 +852,7 @@ void TritonRoute::sendDesignDist()
   }
   design_->clearUpdates();
 }
+
 static void serializeUpdatesBatch(const std::vector<drUpdate>& batch,
                                   const std::string& file_name)
 {
@@ -851,26 +884,33 @@ void TritonRoute::sendGlobalsUpdates(const std::string& globals_path,
     logger_->error(DRT, 9504, "Updating globals remotely failed");
 }
 
-void TritonRoute::sendDesignUpdates(const std::string& globals_path)
+void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeFiles)
 {
   if (!distributed_)
     return;
   if (!design_->hasUpdates())
     return;
-  std::unique_ptr<ProfileTask> serializeTask;
-  if (design_->getVersion() == 0)
-    serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_TA");
-  else
-    serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_UPDATES");
-  const auto& designUpdates = design_->getUpdates();
-  omp_set_num_threads(MAX_THREADS);
-  std::vector<std::string> updates(designUpdates.size());
-#pragma omp parallel for schedule(dynamic)
-  for (int i = 0; i < designUpdates.size(); i++) {
-    updates[i] = fmt::format("{}updates_{}.bin", shared_volume_, i);
-    serializeUpdatesBatch(designUpdates.at(i), updates[i]);
+  std::vector<std::string> updates;
+  if(writeFiles)
+  {
+    updates.resize(design_->getUpdates().size());
+    std::unique_ptr<ProfileTask> serializeTask;
+    if (design_->getVersion() == 0)
+      serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_TA");
+    else
+      serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_UPDATES");
+    const auto& designUpdates = design_->getUpdates();
+    omp_set_num_threads(MAX_THREADS);
+    std::vector<std::string> updates(designUpdates.size());
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < designUpdates.size(); i++) {
+      updates[i] = fmt::format("{}updates_{}.bin", shared_volume_, i);
+      serializeUpdatesBatch(designUpdates.at(i), updates[i]);
+    }
+    serializeTask->done();
+  } else {
+    updates.push_back(fmt::format("{}updates.bin", shared_volume_));
   }
-  serializeTask->done();
   std::unique_ptr<ProfileTask> task;
   if (design_->getVersion() == 0)
     task = std::make_unique<ProfileTask>("DIST: SENDING_TA");
@@ -904,7 +944,7 @@ int TritonRoute::main()
   }
   MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
   if (distributed_ && !DO_PA) {
-    asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this));
+    asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this, true));
   }
   initDesign();
   if (DO_PA) {
@@ -915,7 +955,7 @@ int TritonRoute::main()
       io::Writer writer(getDesign(), logger_);
       writer.updateDb(db_, true);
       if (distributed_)
-        asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this));
+        asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this, true));
     }
   }
   if (debug_->debugDumpDR) {
@@ -934,7 +974,7 @@ int TritonRoute::main()
   ta();
   if (distributed_) {
     asio::post(dist_pool_,
-               boost::bind(&TritonRoute::sendDesignUpdates, this, ""));
+               boost::bind(&TritonRoute::sendDesignUpdates, this, "", true));
   }
   dr();
   if (!SINGLE_STEP_DR) {
@@ -1136,6 +1176,27 @@ bool TritonRoute::getWorkerResults(
     return false;
   results = workers_results_;
   workers_results_.clear();
+  results_sz_ = 0;
+  return true;
+}
+
+void TritonRoute::addWorkerResults(
+    const std::vector<std::pair<int, int>>& results)
+{
+  std::unique_lock<std::mutex> lock(results_mutex_);
+  stubborn_results_.insert(
+      stubborn_results_.end(), results.begin(), results.end());
+  results_sz_ = stubborn_results_.size();
+}
+
+bool TritonRoute::getWorkerResults(
+    std::vector<std::pair<int, int>>& results)
+{
+  std::unique_lock<std::mutex> lock(results_mutex_);
+  if (stubborn_results_.empty())
+    return false;
+  results = stubborn_results_;
+  stubborn_results_.clear();
   results_sz_ = 0;
   return true;
 }

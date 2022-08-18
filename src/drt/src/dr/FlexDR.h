@@ -484,7 +484,8 @@ class FlexDRWorker
   int main(frDesign* design);
   void distributedMain(frDesign* design);
   void updateDesign(frDesign* design);
-  std::string reloadedMain();
+  void reloadedMain();
+  std::string getSerializedWorker();
   bool end(frDesign* design);
 
   Logger* getLogger() { return logger_; }

@@ -39,6 +39,7 @@
 
 #include "db/infra/frTime.h"
 #include "distributed/RoutingJobDescription.h"
+#include "distributed/MLJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR.h"
 #include "dst/Distributed.h"
@@ -66,26 +67,39 @@ class RoutingCallBack : public dst::JobCallBack
   }
   void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
-    if (msg.getJobType() != dst::JobMessage::ROUTING)
-      return;
+    if (msg.getJobType() == dst::JobMessage::ROUTING_INITIAL)
+      handleInitialRoutingJob(msg, sock);
+    else if (msg.getJobType() == dst::JobMessage::ROUTING_STUBBORN)
+      handleStubbornTilesJob(msg, sock);
+  }
+  void onRoutingStubbornResultReceived(dst::JobMessage& msg, dst::socket& sock) override
+  {
+    MLJobDescription* desc = static_cast<MLJobDescription*>(msg.getJobDescription());
+    router_->addWorkerResults({desc->getResult()});
+    {
+      dst::JobMessage result(dst::JobMessage::NONE);
+      dist_->sendResult(result, sock);
+      sock.close();
+    }
+  }
+
+  void handleInitialRoutingJob(dst::JobMessage& msg, dst::socket& sock)
+  {
     RoutingJobDescription* desc
         = static_cast<RoutingJobDescription*>(msg.getJobDescription());
-    if (init_) {
-      init_ = false;
-      omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
-    }
+    omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
     auto workers = desc->getWorkers();
     int size = workers.size();
     std::vector<std::pair<int, std::string>> results;
     asio::thread_pool reply_pool(1);
     int prev_perc = 0;
     int cnt = 0;
-#pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < workers.size(); i++) {
       std::pair<int, std::string> result
           = {workers.at(i).first,
              router_->runDRWorker(workers.at(i).second, &via_data_)};
-#pragma omp critical
+      #pragma omp critical
       {
         results.push_back(result);
         ++cnt;
@@ -106,6 +120,38 @@ class RoutingCallBack : public dst::JobCallBack
     }
     reply_pool.join();
     sendResult(results, sock, true, cnt);
+  }
+
+  void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
+  {
+    MLJobDescription* desc
+        = static_cast<MLJobDescription*>(msg.getJobDescription());
+    auto remote_ip = sock.remote_endpoint().address().to_string();
+    {
+      dst::JobMessage result(dst::JobMessage::NONE);
+      dist_->sendResult(result, sock);
+      sock.close();
+    }
+      
+    omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
+    auto workers = desc->getWorkers();
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < workers.size(); i++) {
+      std::pair<int, int> result = {workers.at(i).first, router_->runDRWorkerGetViolNum(workers.at(i).second, &via_data_)};
+      std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
+      resultDesc->setResult(result);
+      dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
+      resultMsg.setJobDescription(std::move(resultDesc));
+      dst::JobMessage dummy;
+      dist_->sendJob(resultMsg, remote_ip.c_str(), desc->getReplyPort(), dummy);
+      #pragma omp critical
+      debugPrint(logger_,
+                 utl::DRT,
+                 "autotuner",
+                 1,
+                 "Number of markers {}", result.second);
+    }
+    logger_->report("########Done########");
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override

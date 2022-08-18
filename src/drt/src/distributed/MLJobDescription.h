@@ -25,17 +25,53 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#pragma once
-#include <dst/Distributed.h>
 
-namespace dst {
-class JobMessage;
-class JobCallBack
+#pragma once
+#include <boost/serialization/base_object.hpp>
+#include <string>
+
+#include "dst/JobMessage.h"
+namespace boost::serialization {
+class access;
+}
+namespace fr {
+
+class MLJobDescription : public dst::JobDescription
 {
  public:
-  virtual void onRoutingJobReceived(JobMessage& msg, socket& sock) = 0;
-  virtual void onRoutingStubbornResultReceived(JobMessage& msg, socket& sock) = 0;
-  virtual void onFrDesignUpdated(JobMessage& msg, socket& sock) = 0;
-  virtual ~JobCallBack() {}
+  MLJobDescription() {}
+  void setWorkers(const std::vector<std::pair<int, std::string>>& workers)
+  {
+    workers_ = workers;
+  }
+  void setResult(const std::pair<int, int>& result)
+  {
+    result_ = result;
+  }
+  void setReplyPort(ushort value) { reply_port_ = value; }
+  const std::vector<std::pair<int, std::string>>& getWorkers() const
+  {
+    return workers_;
+  }
+  std::pair<int, int> getResult() const
+  {
+    return result_;
+  }
+  ushort getReplyPort() const { return reply_port_; }
+
+ private:
+  std::vector<std::pair<int, std::string>> workers_;
+  std::pair<int, int> result_;
+  ushort reply_port_;
+
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
+    (ar) & workers_;
+    (ar) & result_;
+    (ar) & reply_port_;
+  }
+  friend class boost::serialization::access;
 };
-}  // namespace dst
+}  // namespace fr
