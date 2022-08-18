@@ -137,7 +137,8 @@ class RoutingCallBack : public dst::JobCallBack
     auto workers = desc->getWorkers();
     #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < workers.size(); i++) {
-      std::pair<int, int> result = {workers.at(i).first, router_->runDRWorkerGetViolNum(workers.at(i).second, &via_data_)};
+      int bestNumMarkers = router_->runDRWorkerGetViolNum(workers.at(i).second, &via_data_);
+      std::pair<int, int> result = {workers.at(i).first, bestNumMarkers};
       std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
       resultDesc->setResult(result);
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
@@ -173,7 +174,10 @@ class RoutingCallBack : public dst::JobCallBack
       frTime t;
       logger_->report("Design Update");
       if (desc->isDesignUpdate())
-        router_->updateDesign(desc->getUpdates());
+        if(desc->getUpdates().size() == 1)
+          router_->updateDesign(desc->getUpdates()[0]);
+        else
+          router_->updateDesign(desc->getUpdates());
       else
         router_->resetDb(desc->getDesignPath().c_str());
       t.print(logger_);

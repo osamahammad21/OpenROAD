@@ -175,7 +175,7 @@ int FlexDRWorker::main(frDesign* design)
   if (getDRIter() && getInitNumMarkers() == 0 && !needRecheck_) {
     skipRouting_ = true;
   }
-  if (debugSettings_->debugDumpDR
+  if (getInitNumMarkers() > 5 && debugSettings_->debugDumpDR
       && debugSettings_->iter == getDRIter()) {
     std::string workerDir = fmt::format("{}/worker{}x_{}y",debugSettings_->dumpDir, getRouteBox().xMin(), getRouteBox().yMin());
     mkdir(workerDir.c_str(),0777);

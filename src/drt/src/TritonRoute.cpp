@@ -342,8 +342,6 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
       {
         for(auto followGuide : {true, false})
         {
-          if(mazeEndIter > 3)
-            continue;
           FlexDR::SearchRepairArgs args = {7, 0, mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
           strategies.push_back(args);
           auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), graphics_.get()); 
@@ -363,6 +361,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   int size = workers.size();
   logger_->report("Trying {} strategies", size);
   int batchSize = size / getCloudSize();
+  dist_pool_.join();
   #pragma omp parallel for schedule(dynamic)
   for(int i = 0; i < size; i += batchSize)
   {
@@ -863,7 +862,7 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
 {
   if (!distributed_)
     return;
-  if (!design_->hasUpdates())
+  if (!design_->hasUpdates() && writeFiles)
     return;
   std::vector<std::string> updates;
   if(writeFiles)
