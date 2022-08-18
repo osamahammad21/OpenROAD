@@ -39,7 +39,7 @@ class HelperCallBack : public dst::JobCallBack
   void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
     JobMessage replyMsg;
-    if (msg.getJobType() == JobMessage::JobType::ROUTING)
+    if (msg.getJobType() == JobMessage::JobType::ROUTING_INITIAL)
       replyMsg.setJobType(JobMessage::JobType::SUCCESS);
     else
       replyMsg.setJobType(JobMessage::JobType::ERROR);
@@ -47,6 +47,7 @@ class HelperCallBack : public dst::JobCallBack
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override {}
+  void onRoutingStubbornResultReceived(dst::JobMessage& msg, dst::socket& sock) override {}
 
  private:
   dst::Distributed* dist_;

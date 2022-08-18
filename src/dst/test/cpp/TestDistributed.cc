@@ -34,7 +34,7 @@ BOOST_AUTO_TEST_CASE(test_default)
 
   // Sending a job to worker to test if runWorker() correctly created a worker.
   // Note this test also tests sendJob().
-  JobMessage msg(JobMessage::JobType::ROUTING);
+  JobMessage msg(JobMessage::JobType::ROUTING_INITIAL);
   JobMessage result;
   BOOST_TEST(dist->sendJob(msg, local_ip.c_str(), worker_port, result));
   BOOST_TEST(result.getJobType() == JobMessage::JobType::SUCCESS);

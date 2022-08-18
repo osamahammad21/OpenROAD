@@ -63,13 +63,13 @@ BOOST_AUTO_TEST_CASE(test_default)
                          worker_port_2);
   dist->addCallBack(new HelperCallBack(dist));
   dist->runWorker(local_ip.c_str(), worker_port_1, true);
-  msg.setJobType(JobMessage::JobType::ROUTING);
+  msg.setJobType(JobMessage::JobType::ROUTING_INITIAL);
   result.setJobType(JobMessage::JobType::NONE);
   BOOST_TEST(dist->sendJob(msg, local_ip.c_str(), balancer_port, result));
   BOOST_TEST(result.getJobType() == JobMessage::JobType::SUCCESS);
 
   // Checking broadcast message relaying and handling.
-  JobMessage broadcast_msg(JobMessage::JobType::ROUTING,
+  JobMessage broadcast_msg(JobMessage::JobType::ROUTING_INITIAL,
                            JobMessage::MessageType::BROADCAST);
   result.setJobType(JobMessage::JobType::NONE);
   balancer->addWorker(local_ip, worker_port_3);
