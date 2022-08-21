@@ -27,51 +27,29 @@
  */
 
 #pragma once
-#include <boost/serialization/base_object.hpp>
-#include <string>
 
-#include "WorkerResult.h"
-#include "dst/JobMessage.h"
 namespace boost::serialization {
 class access;
 }
 namespace fr {
 
-class MLJobDescription : public dst::JobDescription
+struct WorkerResult
 {
  public:
-  MLJobDescription() {}
-  void setWorkers(const std::vector<std::pair<int, std::string>>& workers)
-  {
-    workers_ = workers;
-  }
-  void setResult(const WorkerResult& result)
-  {
-    result_ = result;
-  }
-  void setReplyPort(ushort value) { reply_port_ = value; }
-  const std::vector<std::pair<int, std::string>>& getWorkers() const
-  {
-    return workers_;
-  }
-  WorkerResult getResult() const
-  {
-    return result_;
-  }
-  ushort getReplyPort() const { return reply_port_; }
+  int id;
+  int numOfViolations;
+  int numOfRecheckViols;
+  int64_t runTime;
+  WorkerResult() : id(-1), numOfViolations(-1), numOfRecheckViols(-1), runTime(-1) {}
 
  private:
-  std::vector<std::pair<int, std::string>> workers_;
-  WorkerResult result_;
-  ushort reply_port_;
-
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
-    (ar) & workers_;
-    (ar) & result_;
-    (ar) & reply_port_;
+    (ar) & id;
+    (ar) & numOfViolations;
+    (ar) & numOfRecheckViols;
+    (ar) & runTime;
   }
   friend class boost::serialization::access;
 };

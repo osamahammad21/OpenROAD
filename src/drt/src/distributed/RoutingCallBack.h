@@ -49,7 +49,8 @@
 #include "ord/OpenRoad.hh"
 #include "triton_route/TritonRoute.h"
 #include "utl/Logger.h"
-
+#include <chrono>
+using namespace std::chrono;
 namespace asio = boost::asio;
 namespace odb {
 class dbDatabase;
@@ -132,13 +133,25 @@ class RoutingCallBack : public dst::JobCallBack
       dist_->sendResult(result, sock);
       sock.close();
     }
-      
     omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
     auto workers = desc->getWorkers();
     #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < workers.size(); i++) {
-      int bestNumMarkers = router_->runDRWorkerGetViolNum(workers.at(i).second, &via_data_);
-      std::pair<int, int> result = {workers.at(i).first, bestNumMarkers};
+      high_resolution_clock::time_point t0 = high_resolution_clock::now();
+      std::unique_ptr<FlexDRWorker> uWorker;
+      router_->runDRWorker(uWorker, workers.at(i).second, &via_data_);
+      high_resolution_clock::time_point t1 = high_resolution_clock::now();
+      seconds time_span = duration_cast<seconds>(t1 - t0);
+      WorkerResult result;
+      result.id = workers.at(i).first;
+      result.numOfViolations = uWorker->getBestNumMarkers();
+      result.runTime = time_span.count();
+      result.numOfRecheckViols = 0;
+      for(const auto& marker : uWorker->getBestMarkers())
+      {
+        if(marker.getConstraint()->typeId() == frConstraintTypeEnum::frcRecheckConstraint)
+          result.numOfRecheckViols++;
+      }
       std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
       resultDesc->setResult(result);
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
@@ -150,7 +163,12 @@ class RoutingCallBack : public dst::JobCallBack
                  utl::DRT,
                  "autotuner",
                  1,
-                 "Number of markers {}", result.second);
+                 "Number of markers {} recheck {} elapsed time {:02}:{:02}:{:02}", 
+                 result.numOfViolations,
+                 result.numOfRecheckViols,
+                 frTime::getHours(result.runTime),
+                 frTime::getMinutes(result.runTime),
+                 frTime::getSeconds(result.runTime));
     }
     logger_->report("########Done########");
   }

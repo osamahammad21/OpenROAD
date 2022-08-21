@@ -38,13 +38,14 @@ void frTime::print(Logger* logger)
 {
   auto t1 = std::chrono::high_resolution_clock::now();
   auto time_span = std::chrono::duration_cast<std::chrono::seconds>(t1 - t0_);
-  int hour = time_span.count() / 3600;
-  int min = (time_span.count() % 3600) / 60;
-  int sec = time_span.count() % 60;
+  auto timeSpan = time_span.count();
+  int hour = getHours(timeSpan);
+  int min = getMinutes(timeSpan);
+  int sec = getSeconds(timeSpan);
   auto t2 = (clock() - t_) / CLOCKS_PER_SEC;
-  int chour = t2 / 3600;
-  int cmin = (t2 % 3600) / 60;
-  int csec = t2 % 60;
+  int chour = getHours(t2);
+  int cmin = getMinutes(t2);
+  int csec = getSeconds(t2);
   logger->info(DRT,
                267,
                "cpu time = {:02}:{:02}:{:02}, "
@@ -60,6 +61,18 @@ void frTime::print(Logger* logger)
                getPeakRSS() / (1024.0 * 1024.0));
 }
 
+ushort frTime::getHours(const int64_t& timeSpan)
+{
+  return timeSpan / 3600;
+}
+ushort frTime::getMinutes(const int64_t& timeSpan)
+{
+  return (timeSpan % 3600) / 60;
+}
+ushort frTime::getSeconds(const int64_t& timeSpan)
+{
+  return timeSpan % 60;
+}
 namespace fr {
 
 std::ostream& operator<<(std::ostream& os, const frTime& t)

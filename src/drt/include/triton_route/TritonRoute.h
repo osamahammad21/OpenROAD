@@ -50,6 +50,7 @@ struct frDebugSettings;
 class FlexDR;
 struct FlexDRViaData;
 class frMarker;
+struct WorkerResult;
 }  // namespace fr
 
 namespace odb {
@@ -152,8 +153,9 @@ class TritonRoute
   // for debugging and not general usage.
   std::string runDRWorker(const std::string& workerStr,
                           fr::FlexDRViaData* viaData);
-  int runDRWorkerGetViolNum(const std::string& workerStr,
-                            fr::FlexDRViaData* viaData);
+  void runDRWorker(std::unique_ptr<fr::FlexDRWorker>& worker,
+                   const std::string& workerStr,
+                   fr::FlexDRViaData* viaData);
   void debugSingleWorker(const std::string& dumpDir, const std::string& drcRpt);
   void updateGlobals(const char* file_name);
   void resetDb(const char* file_name);
@@ -162,9 +164,9 @@ class TritonRoute
   void addWorkerResults(
       const std::vector<std::pair<int, std::string>>& results);
   void addWorkerResults(
-      const std::vector<std::pair<int, int>>& results);
+      const std::vector<fr::WorkerResult>& results);
   bool getWorkerResults(std::vector<std::pair<int, std::string>>& results);
-  bool getWorkerResults(std::vector<std::pair<int, int>>& results);
+  bool getWorkerResults(std::vector<fr::WorkerResult>& results);
   int getWorkerResultsSize();
   void sendDesignDist(bool writeFiles = true);
   bool writeGlobals(const std::string& name);
@@ -196,7 +198,7 @@ class TritonRoute
   unsigned short local_port_;
   std::string shared_volume_;
   std::vector<std::pair<int, std::string>> workers_results_;
-  std::vector<std::pair<int, int>> stubborn_results_;
+  std::vector<fr::WorkerResult> stubborn_results_;
   std::mutex results_mutex_;
   int results_sz_;
   unsigned int cloud_sz_;

@@ -58,6 +58,8 @@
 #include <filesystem>
 #include "dst/BalancerJobDescription.h"
 #include "distributed/MLJobDescription.h"
+#include "distributed/WorkerResult.h"
+#include "dst/BroadcastJobDescription.h"
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
@@ -210,15 +212,15 @@ std::string TritonRoute::runDRWorker(const std::string& workerStr,
   return result;
 }
 
-int TritonRoute::runDRWorkerGetViolNum(const std::string& workerStr,
-                                       FlexDRViaData* viaData)
+void TritonRoute::runDRWorker(std::unique_ptr<fr::FlexDRWorker>& worker,
+                              const std::string& workerStr,
+                              FlexDRViaData* viaData)
 {
-  auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+  worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
   worker->setViaData(viaData);
   worker->setSharedVolume(shared_volume_);
   worker->setDebugSettings(debug_.get());
   worker->reloadedMain();
-  return worker->getBestNumMarkers();
 }
 
 void serializeWorkerTR(FlexDRWorker* worker, std::string& workerStr)
@@ -333,7 +335,8 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::mutex mtx;
   std::vector<FlexDR::SearchRepairArgs> strategies;
   std::vector<std::unique_ptr<FlexDRWorker>> workers;
-  dist_->runWorker(local_ip_.c_str(), local_port_, true);
+  if(distributed_)
+    dist_->runWorker(local_ip_.c_str(), local_port_, true);
   for(auto mazeEndIter : {3, 8 ,16, 32, 64})
   {
     for(auto markerCost : {2, 4, 8, 16, 32, 64})
@@ -359,28 +362,64 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
     }
   }
   int size = workers.size();
+  logger_->report("Initial Number of Violations is {}", workers[0]->getInitNumMarkers());
   logger_->report("Trying {} strategies", size);
-  int batchSize = size / getCloudSize();
-  dist_pool_.join();
-  #pragma omp parallel for schedule(dynamic)
-  for(int i = 0; i < size; i += batchSize)
+  if(distributed_)
   {
-    sendWorkers(workers, i, batchSize);
-  }
-  int remaining = size;
-  while(remaining)
-  {
-    std::vector<std::pair<int, int>> results;
-    if(!getWorkerResults(results))
+    dist_pool_.join();
+    int batchSize = size / getCloudSize();
+    asio::thread_pool listenPool(1);
+    asio::post(listenPool, [this, size, strategies](){
+      int remaining = size;
+      while(remaining)
+      {
+        std::vector<WorkerResult> results;
+        if(!getWorkerResults(results))
+        {
+          sleep(1);
+          continue;
+        }
+        remaining -= results.size();
+        for(auto result : results)
+        {
+          auto args = strategies[result.id];
+          debugPrint(logger_,
+                    utl::DRT,
+                    "autotuner",
+                    1,
+                    "{}_{}_{}_{}_{} Number of markers {} recheck {} elapsed time {:02}:{:02}:{:02}",
+                    args.mazeEndIter,
+                    args.workerDRCCost,
+                    args.workerMarkerCost,
+                    args.ripupMode,
+                    args.followGuide,
+                    result.numOfViolations,
+                    result.numOfRecheckViols,
+                    frTime::getHours(result.runTime),
+                    frTime::getMinutes(result.runTime),
+                    frTime::getSeconds(result.runTime)
+                    );
+        }
+      }
+    });
+    #pragma omp parallel for schedule(dynamic)
+    for(int i = 0; i < size; i += batchSize)
     {
-      sleep(1);
-      continue;
+      sendWorkers(workers, i, batchSize);
     }
-    remaining -= results.size();
-    for(auto [i, numViolations] : results)
+    
+  } else {
+    #pragma omp parallel for schedule(dynamic)
+    for(int i = 0; i < workers.size(); i++)
     {
-      auto args = strategies[i];
-      debugPrint(logger_,
+      const auto& args = strategies[i];
+      auto argsTuple = std::make_tuple(args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.ripupMode, args.followGuide);
+      auto& worker = workers[i];
+      worker->reloadedMain();
+      #pragma omp critical
+      {
+        argsMap[argsTuple] = worker->getBestNumMarkers();
+        debugPrint(logger_,
                 utl::DRT,
                 "autotuner",
                 1,
@@ -390,34 +429,11 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                 args.workerMarkerCost,
                 args.ripupMode,
                 args.followGuide,
-                numViolations);
+                worker->getBestNumMarkers());
+      }
+      worker.reset();
     }
   }
-  //#pragma omp parallel for schedule(dynamic)
-  // for(int i = 0; i < workers.size(); i++)
-  // {
-  //   const auto& args = strategies[i];
-  //   auto argsTuple = std::make_tuple(args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.ripupMode, args.followGuide);
-  //   auto& worker = workers[i];
-  //   worker->reloadedMain();
-  //   #pragma omp critical
-  //   {
-  //     // std::unique_lock lock(mtx);
-  //     argsMap[argsTuple] = worker->getBestNumMarkers();
-  //     debugPrint(logger_,
-  //              utl::DRT,
-  //              "autotuner",
-  //              1,
-  //              "{}_{}_{}_{}_{} Number of markers {}",
-  //              args.mazeEndIter,
-  //              args.workerDRCCost,
-  //              args.workerMarkerCost,
-  //              args.ripupMode,
-  //              args.followGuide,
-  //              worker->getBestNumMarkers());
-  //   }
-  //   break;
-  // }
 }
 
 void TritonRoute::test()
@@ -822,7 +838,13 @@ void TritonRoute::sendDesignDist(bool writeFiles)
     msg.setJobDescription(std::move(desc));
     bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
     if (!ok)
-      logger_->error(DRT, 12304, "Updating design remotely failed");
+      logger_->error(DRT, 1015, "Updating design remotely failed");
+    dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
+    if(resultDesc->getWorkersCount() != getCloudSize())
+    {
+      logger_->info(DRT, 1012, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+      setCloudSize(resultDesc->getWorkersCount());
+    }
   }
   design_->clearUpdates();
 }
@@ -856,6 +878,12 @@ void TritonRoute::sendGlobalsUpdates(const std::string& globals_path,
   bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   if (!ok)
     logger_->error(DRT, 9504, "Updating globals remotely failed");
+  dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
+  if(resultDesc->getWorkersCount() != getCloudSize())
+  {
+    logger_->info(DRT, 1013, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+    setCloudSize(resultDesc->getWorkersCount());
+  }
 }
 
 void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeFiles)
@@ -904,6 +932,12 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
   bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   if (!ok)
     logger_->error(DRT, 304, "Updating design remotely failed");
+  dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
+  if(resultDesc->getWorkersCount() != getCloudSize())
+  {
+    logger_->info(DRT, 1014, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+    setCloudSize(resultDesc->getWorkersCount());
+  }
   task->done();
   design_->clearUpdates();
   design_->incrementVersion();
@@ -1155,7 +1189,7 @@ bool TritonRoute::getWorkerResults(
 }
 
 void TritonRoute::addWorkerResults(
-    const std::vector<std::pair<int, int>>& results)
+    const std::vector<fr::WorkerResult>& results)
 {
   std::unique_lock<std::mutex> lock(results_mutex_);
   stubborn_results_.insert(
@@ -1164,7 +1198,7 @@ void TritonRoute::addWorkerResults(
 }
 
 bool TritonRoute::getWorkerResults(
-    std::vector<std::pair<int, int>>& results)
+    std::vector<fr::WorkerResult>& results)
 {
   std::unique_lock<std::mutex> lock(results_mutex_);
   if (stubborn_results_.empty())

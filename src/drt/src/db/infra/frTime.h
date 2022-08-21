@@ -59,6 +59,9 @@ class frTime
         = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0_);
     return time_span.count();
   }
+  static ushort getHours(const int64_t& timeSpan);
+  static ushort getMinutes(const int64_t& timeSpan);
+  static ushort getSeconds(const int64_t& timeSpan);
  private:
   std::chrono::high_resolution_clock::time_point t0_;
   clock_t t_;
