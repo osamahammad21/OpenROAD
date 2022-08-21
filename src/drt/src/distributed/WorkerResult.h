@@ -38,9 +38,8 @@ struct WorkerResult
  public:
   int id;
   int numOfViolations;
-  int numOfRecheckViols;
   int64_t runTime;
-  WorkerResult() : id(-1), numOfViolations(-1), numOfRecheckViols(-1), runTime(-1) {}
+  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1) {}
 
  private:
   template <class Archive>
@@ -48,7 +47,6 @@ struct WorkerResult
   {
     (ar) & id;
     (ar) & numOfViolations;
-    (ar) & numOfRecheckViols;
     (ar) & runTime;
   }
   friend class boost::serialization::access;

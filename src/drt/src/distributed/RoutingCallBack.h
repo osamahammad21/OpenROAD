@@ -146,12 +146,6 @@ class RoutingCallBack : public dst::JobCallBack
       result.id = workers.at(i).first;
       result.numOfViolations = uWorker->getBestNumMarkers();
       result.runTime = time_span.count();
-      result.numOfRecheckViols = 0;
-      for(const auto& marker : uWorker->getBestMarkers())
-      {
-        if(marker.getConstraint()->typeId() == frConstraintTypeEnum::frcRecheckConstraint)
-          result.numOfRecheckViols++;
-      }
       std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
       resultDesc->setResult(result);
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
@@ -163,9 +157,8 @@ class RoutingCallBack : public dst::JobCallBack
                  utl::DRT,
                  "autotuner",
                  1,
-                 "Number of markers {} recheck {} elapsed time {:02}:{:02}:{:02}", 
+                 "Number of markers {} elapsed time {:02}:{:02}:{:02}", 
                  result.numOfViolations,
-                 result.numOfRecheckViols,
                  frTime::getHours(result.runTime),
                  frTime::getMinutes(result.runTime),
                  frTime::getSeconds(result.runTime));
