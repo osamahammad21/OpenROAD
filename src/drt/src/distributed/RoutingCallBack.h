@@ -127,7 +127,6 @@ class RoutingCallBack : public dst::JobCallBack
   {
     MLJobDescription* desc
         = static_cast<MLJobDescription*>(msg.getJobDescription());
-    auto remote_ip = sock.remote_endpoint().address().to_string();
     {
       dst::JobMessage result(dst::JobMessage::NONE);
       dist_->sendResult(result, sock);
@@ -161,19 +160,13 @@ class RoutingCallBack : public dst::JobCallBack
       worker->setViaData(&via_data_);
 
       high_resolution_clock::time_point t0 = high_resolution_clock::now();
-      // worker->reloadedMain();
+      worker->reloadedMain();
       high_resolution_clock::time_point t1 = high_resolution_clock::now();
       seconds time_span = duration_cast<seconds>(t1 - t0);
       WorkerResult result;
-      result.id = workers.at(i).first;
-      result.numOfViolations = uWorker->getBestNumMarkers();
+      result.id = args.offset;
+      result.numOfViolations = worker->getBestNumMarkers();
       result.runTime = time_span.count();
-      std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
-      resultDesc->setResult(result);
-      dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
-      resultMsg.setJobDescription(std::move(resultDesc));
-      dst::JobMessage dummy;
-      dist_->sendJob(resultMsg, remote_ip.c_str(), desc->getReplyPort(), dummy);
       #pragma omp critical
       debugPrint(logger_,
                  utl::DRT,
@@ -189,7 +182,7 @@ class RoutingCallBack : public dst::JobCallBack
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
       resultMsg.setJobDescription(std::move(resultDesc));
       dst::JobMessage dummy;
-      dist_->sendJob(resultMsg, remote_ip.c_str(), desc->getReplyPort(), dummy);
+      dist_->sendJob(resultMsg, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
     }
     logger_->report("########Done########");
   }

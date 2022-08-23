@@ -137,6 +137,8 @@ struct SearchRepairArgs
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
+    (ar) & size;
+    (ar) & offset;
     (ar) & followGuide;
     (ar) & mazeEndIter; 
     (ar) & workerDRCCost; 

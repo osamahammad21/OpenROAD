@@ -286,14 +286,8 @@ static inline void copyFile(const char* srcPath, const char* dstPath)
   dst.close();
 }
 
-void TritonRoute::sendSingleWorkerEnv(const std::string& dumpDir, const std::vector<SearchRepairArgs>& strategies, int begin, int size)
+void TritonRoute::sendSingleWorkerEnv(const std::vector<SearchRepairArgs>& strategies, int begin, int size)
 {
-  copyFile(fmt::format("{}/init_globals.bin", dumpDir).c_str(), fmt::format("{}init_globals.bin", shared_volume_).c_str());
-  copyFile(fmt::format("{}/design.odb", dumpDir).c_str(), fmt::format("{}design.odb", shared_volume_).c_str());
-  copyFile(fmt::format("{}/updates.bin", dumpDir).c_str(), fmt::format("{}updates.bin", shared_volume_).c_str());
-  copyFile(fmt::format("{}/worker_globals.bin", dumpDir).c_str(), fmt::format("{}worker_globals.bin", shared_volume_).c_str());
-  copyFile(fmt::format("{}/viadata.bin", dumpDir).c_str(), fmt::format("{}viadata.bin", shared_volume_).c_str());
-  copyFile(fmt::format("{}/worker.bin", dumpDir).c_str(), fmt::format("{}worker.bin", shared_volume_).c_str());
   std::unique_ptr<MLJobDescription> desc = std::make_unique<MLJobDescription>();
   desc->init_globals_path_ = fmt::format("{}init_globals.bin", shared_volume_);
   desc->odb_path_ = fmt::format("{}design.odb", shared_volume_);
@@ -301,27 +295,15 @@ void TritonRoute::sendSingleWorkerEnv(const std::string& dumpDir, const std::vec
   desc->worker_globals_path_ = fmt::format("{}worker_globals.bin", shared_volume_);
   desc->via_data_path_ = fmt::format("{}viadata.bin", shared_volume_);
   desc->worker_path_ = fmt::format("{}worker.bin", shared_volume_);
-  desc->setReplyPort(local_port_);
   desc->strategies_.resize(size);
-  std::copy(strategies.begin() + begin, strategies.begin() + begin + size, desc->strategies_.begin());
+  std::copy(strategies.begin() + begin , strategies.begin() + begin + size, desc->strategies_.begin());
   dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN), result(dst::JobMessage::NONE);
+  desc->setReplyPort(local_port_);
+  desc->setReplyHost(local_ip_);
   msg.setJobDescription(std::move(desc));
   std::string remote_ip = dist_ip_;
   unsigned short remote_port = dist_port_;
-  if (true) {
-    dst::JobMessage msg(dst::JobMessage::BALANCER),
-        result(dst::JobMessage::NONE);
-    bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
-    if (!ok) {
-      logger_->error(utl::DRT, 6231, "Balancer failed");
-    } else {
-      dst::BalancerJobDescription* desc
-          = static_cast<dst::BalancerJobDescription*>(
-              result.getJobDescription());
-      remote_ip = desc->getWorkerIP();
-      remote_port = desc->getWorkerPort();
-    }
-  }
+
   dist_->sendJob(msg, remote_ip.c_str(), remote_port, result);
 }
 
@@ -345,7 +327,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
       {
         for(auto followGuide : {true, false})
         {
-          SearchRepairArgs args = {7, 0, mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
+          SearchRepairArgs args = {7, (int) strategies.size(), mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
           strategies.push_back(args);
         }
       }
@@ -398,9 +380,16 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
         }
       }
     });
+    copyFile(fmt::format("{}/init_globals.bin", dumpDir).c_str(), fmt::format("{}init_globals.bin", shared_volume_).c_str());
+    copyFile(fmt::format("{}/design.odb", dumpDir).c_str(), fmt::format("{}design.odb", shared_volume_).c_str());
+    copyFile(fmt::format("{}/updates.bin", dumpDir).c_str(), fmt::format("{}updates.bin", shared_volume_).c_str());
+    copyFile(fmt::format("{}/worker_globals.bin", dumpDir).c_str(), fmt::format("{}worker_globals.bin", shared_volume_).c_str());
+    copyFile(fmt::format("{}/viadata.bin", dumpDir).c_str(), fmt::format("{}viadata.bin", shared_volume_).c_str());
+    copyFile(fmt::format("{}/worker.bin", dumpDir).c_str(), fmt::format("{}worker.bin", shared_volume_).c_str());
+    #pragma omp parallel for schedule(dynamic)
     for(int i = 0; i < size; i += batchSize)
     {
-      sendSingleWorkerEnv(dumpDir, strategies, i, batchSize);
+      sendSingleWorkerEnv(strategies, i, batchSize);
     }
     listenPool.join();
     

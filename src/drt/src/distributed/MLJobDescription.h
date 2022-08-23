@@ -51,6 +51,7 @@ class MLJobDescription : public dst::JobDescription
     result_ = result;
   }
   void setReplyPort(ushort value) { reply_port_ = value; }
+  void setReplyHost(const std::string& value) { reply_host_ = value; }
   const std::vector<std::pair<int, std::string>>& getWorkers() const
   {
     return workers_;
@@ -60,6 +61,7 @@ class MLJobDescription : public dst::JobDescription
     return result_;
   }
   ushort getReplyPort() const { return reply_port_; }
+  std::string getReplyHost() const { return reply_host_; }
   std::string odb_path_;
   std::string init_globals_path_;
   std::string updates_path_;
@@ -72,6 +74,7 @@ class MLJobDescription : public dst::JobDescription
   std::vector<std::pair<int, std::string>> workers_;
   WorkerResult result_;
   ushort reply_port_;
+  std::string reply_host_;
   
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
@@ -80,13 +83,14 @@ class MLJobDescription : public dst::JobDescription
     (ar) & workers_;
     (ar) & result_;
     (ar) & reply_port_;
+    (ar) & reply_host_;
     (ar) & odb_path_;
     (ar) & init_globals_path_;
     (ar) & updates_path_;
     (ar) & via_data_path_;
     (ar) & worker_path_;
     (ar) & worker_globals_path_;
-    // (ar) & strategies_;
+    (ar) & strategies_;
   }
   friend class boost::serialization::access;
 };

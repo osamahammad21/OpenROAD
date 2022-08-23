@@ -11,7 +11,7 @@ detailed_route_run_worker -dump_dir results/worker138600x_79800y/ \
                           -remote_port 1234 \
                           -local_host 127.0.0.1 \
                           -local_port 9134 \
-                          -cloud_size 4 \
+                          -cloud_size 3 \
                           -shared_volume results/shared_volume/
 exec kill $server1
 exec kill $server2
