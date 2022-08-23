@@ -10,6 +10,9 @@ detailed_route_run_worker -dump_dir results/worker138600x_79800y/ \
                           -remote_host 127.0.0.1 \
                           -remote_port 1234 \
                           -local_host 127.0.0.1 \
-                          -local_port 7777 \
-                          -cloud_size 3 \
+                          -local_port 9134 \
+                          -cloud_size 4 \
                           -shared_volume results/shared_volume/
+exec kill $server1
+exec kill $server2
+exec kill $balancer

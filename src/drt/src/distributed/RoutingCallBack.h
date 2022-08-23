@@ -133,13 +133,35 @@ class RoutingCallBack : public dst::JobCallBack
       dist_->sendResult(result, sock);
       sock.close();
     }
+    router_->updateGlobals(desc->init_globals_path_.c_str());
+    router_->resetDb(desc->odb_path_.c_str());
+    router_->updateDesign(desc->updates_path_.c_str());
+    router_->updateGlobals(desc->worker_globals_path_.c_str());
+    std::ifstream viaDataFile(desc->via_data_path_,
+                              std::ios::binary);
+    frIArchive ar(viaDataFile);
+    ar >> via_data_;
+    std::ifstream workerFile(desc->worker_path_,
+                           std::ios::binary);
+    std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
+                          std::istreambuf_iterator<char>());
+    workerFile.close();
+
     omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
-    auto workers = desc->getWorkers();
+    auto strategies = desc->strategies_;
     #pragma omp parallel for schedule(dynamic)
-    for (int i = 0; i < workers.size(); i++) {
+    for (int i = 0; i < strategies.size(); i++) {
+      auto args = strategies.at(i);
+      auto worker = FlexDRWorker::load(workerStr, logger_, router_->getDesign(), nullptr); 
+      worker->setMazeEndIter(args.mazeEndIter);
+      worker->setMarkerCost(args.workerMarkerCost);
+      worker->setDrcCost(args.workerDRCCost);
+      worker->setRipupMode(args.ripupMode);
+      worker->setFollowGuide((args.followGuide));
+      worker->setViaData(&via_data_);
+
       high_resolution_clock::time_point t0 = high_resolution_clock::now();
-      std::unique_ptr<FlexDRWorker> uWorker;
-      router_->runDRWorker(uWorker, workers.at(i).second, &via_data_);
+      // worker->reloadedMain();
       high_resolution_clock::time_point t1 = high_resolution_clock::now();
       seconds time_span = duration_cast<seconds>(t1 - t0);
       WorkerResult result;
@@ -161,7 +183,13 @@ class RoutingCallBack : public dst::JobCallBack
                  result.numOfViolations,
                  frTime::getHours(result.runTime),
                  frTime::getMinutes(result.runTime),
-                 frTime::getSeconds(result.runTime));
+                 frTime::getSeconds(result.runTime));     
+      std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
+      resultDesc->setResult(result);
+      dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
+      resultMsg.setJobDescription(std::move(resultDesc));
+      dst::JobMessage dummy;
+      dist_->sendJob(resultMsg, remote_ip.c_str(), desc->getReplyPort(), dummy);
     }
     logger_->report("########Done########");
   }

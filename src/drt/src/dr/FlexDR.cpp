@@ -63,6 +63,7 @@ using utl::ThreadException;
 
 BOOST_CLASS_EXPORT(RoutingJobDescription)
 BOOST_CLASS_EXPORT(MLJobDescription)
+BOOST_CLASS_EXPORT(SearchRepairArgs)
 
 
 enum class SerializationType
@@ -1996,7 +1997,7 @@ void FlexDR::end(bool done)
   }
 }
 
-static std::vector<FlexDR::SearchRepairArgs> strategy()
+static std::vector<SearchRepairArgs> strategy()
 {
   const fr::frUInt4 shapeCost = ROUTESHAPECOST;
 

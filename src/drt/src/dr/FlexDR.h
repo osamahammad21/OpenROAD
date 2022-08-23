@@ -59,7 +59,6 @@ class Logger;
 namespace fr {
 
 class frConstraint;
-struct SearchRepairArgs;
 
 struct FlexDRViaData
 {
@@ -100,46 +99,57 @@ struct FlexDRViaData
   friend class boost::serialization::access;
 };
 
+struct SearchRepairArgs
+{
+  int size;
+  int offset;
+  int mazeEndIter;
+  frUInt4 workerDRCCost;
+  frUInt4 workerMarkerCost;
+  int ripupMode;
+  bool followGuide;
+  bool operator==(const SearchRepairArgs& rhs)
+  {
+    return size==rhs.size &&
+            offset==rhs.offset &&
+            mazeEndIter==rhs.mazeEndIter &&
+            workerDRCCost==rhs.workerDRCCost &&
+            workerMarkerCost==rhs.workerMarkerCost &&
+            ripupMode==rhs.ripupMode &&
+            followGuide==rhs.followGuide;
+  }
+  bool operator<(const SearchRepairArgs& rhs) const
+  {
+    if(size != rhs.size)
+      return size < rhs.size;
+    if(offset != rhs.offset)
+      return offset < rhs.offset;
+    if(workerDRCCost != rhs.workerDRCCost)
+      return workerDRCCost < rhs.workerDRCCost;
+    if(workerMarkerCost != rhs.workerMarkerCost)
+      return workerMarkerCost < rhs.workerMarkerCost;
+    if(ripupMode != rhs.ripupMode)
+      return ripupMode < rhs.ripupMode;
+    if(followGuide != rhs.followGuide)
+      return followGuide == false;
+    return false;
+  }
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    (ar) & followGuide;
+    (ar) & mazeEndIter; 
+    (ar) & workerDRCCost; 
+    (ar) & workerMarkerCost; 
+    (ar) & ripupMode; 
+  }
+  friend class boost::serialization::access;
+};
+
+
 class FlexDR
 {
  public:
-  struct SearchRepairArgs
-  {
-    int size;
-    int offset;
-    int mazeEndIter;
-    frUInt4 workerDRCCost;
-    frUInt4 workerMarkerCost;
-    int ripupMode;
-    bool followGuide;
-    bool operator==(const SearchRepairArgs& rhs)
-    {
-      return size==rhs.size &&
-             offset==rhs.offset &&
-             mazeEndIter==rhs.mazeEndIter &&
-             workerDRCCost==rhs.workerDRCCost &&
-             workerMarkerCost==rhs.workerMarkerCost &&
-             ripupMode==rhs.ripupMode &&
-             followGuide==rhs.followGuide;
-    }
-    bool operator<(const SearchRepairArgs& rhs) const
-    {
-      if(size != rhs.size)
-        return size < rhs.size;
-      if(offset != rhs.offset)
-        return offset < rhs.offset;
-      if(workerDRCCost != rhs.workerDRCCost)
-        return workerDRCCost < rhs.workerDRCCost;
-      if(workerMarkerCost != rhs.workerMarkerCost)
-        return workerMarkerCost < rhs.workerMarkerCost;
-      if(ripupMode != rhs.ripupMode)
-        return ripupMode < rhs.ripupMode;
-      if(followGuide != rhs.followGuide)
-        return followGuide == false;
-      return false;
-    }
-  };
-
   // constructors
   FlexDR(triton_route::TritonRoute* router,
          frDesign* designIn,

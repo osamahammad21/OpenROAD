@@ -32,6 +32,7 @@
 
 #include "WorkerResult.h"
 #include "dst/JobMessage.h"
+#include "dr/FlexDR.h"
 namespace boost::serialization {
 class access;
 }
@@ -59,12 +60,19 @@ class MLJobDescription : public dst::JobDescription
     return result_;
   }
   ushort getReplyPort() const { return reply_port_; }
+  std::string odb_path_;
+  std::string init_globals_path_;
+  std::string updates_path_;
+  std::string via_data_path_;
+  std::string worker_path_;
+  std::string worker_globals_path_;
+  vector<SearchRepairArgs> strategies_;
 
  private:
   std::vector<std::pair<int, std::string>> workers_;
   WorkerResult result_;
   ushort reply_port_;
-
+  
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
@@ -72,6 +80,13 @@ class MLJobDescription : public dst::JobDescription
     (ar) & workers_;
     (ar) & result_;
     (ar) & reply_port_;
+    (ar) & odb_path_;
+    (ar) & init_globals_path_;
+    (ar) & updates_path_;
+    (ar) & via_data_path_;
+    (ar) & worker_path_;
+    (ar) & worker_globals_path_;
+    // (ar) & strategies_;
   }
   friend class boost::serialization::access;
 };
