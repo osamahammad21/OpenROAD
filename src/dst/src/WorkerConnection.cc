@@ -102,6 +102,12 @@ void WorkerConnection::handle_read(boost::system::error_code const& err,
         }
         break;
       }
+      case JobMessage::TIMEOUT: {
+        for (auto& cb : dist_->getCallBacks()) {
+          cb->onTimeOut(msg_, sock_);
+        }
+        break;
+      }
       default:
         logger_->warn(utl::DST,
                       5,

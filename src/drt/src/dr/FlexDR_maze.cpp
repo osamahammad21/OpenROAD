@@ -1596,6 +1596,8 @@ void FlexDRWorker::route_queue()
 
   // route
   route_queue_main(rerouteQueue);
+  if(TIMEOUT_REACHED)
+    return;
   // end
   gcWorker_->resetTargetNet();
   gcWorker_->setEnableSurgicalFix(true);
@@ -1768,6 +1770,8 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
       // route
       mazeNetInit(net);
       bool isRouted = routeNet(net);
+      if(TIMEOUT_REACHED)
+        return;
       if (isRouted == false) {
         if (OUT_MAZE_FILE == string("")) {
           if (VERBOSE > 0) {
@@ -2900,6 +2904,11 @@ bool FlexDRWorker::routeNet(drNet* net)
   bool isFirstConn = true;
   bool searchSuccess = true;
   while (!unConnPins.empty()) {
+    if(TIMEOUT_REACHED)
+    {
+      searchSuccess = false;
+      break;
+    }
     mazePinInit();
     auto nextPin = routeNet_getNextDst(
         ccMazeIdx1, ccMazeIdx2, mazeIdx2unConnPins, pinTaperBoxes);
@@ -2920,6 +2929,8 @@ bool FlexDRWorker::routeNet(drNet* net)
       isFirstConn = false;
     } else {
       searchSuccess = false;
+      if(TIMEOUT_REACHED)
+        break;
       logger_->report("Failed to find a path between pin " + nextPin->getName()
                       + " and source aps:");
       for (FlexMazeIdx& mi : connComps) {

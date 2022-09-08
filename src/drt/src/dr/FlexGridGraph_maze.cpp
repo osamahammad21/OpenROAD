@@ -892,6 +892,8 @@ bool FlexGridGraph::search(vector<FlexMazeIdx>& connComps,
     wavefront_.push(currGrid);
   }
   while (!wavefront_.empty()) {
+    if(TIMEOUT_REACHED)
+      return false;
     auto currGrid = wavefront_.top();
     wavefront_.pop();
     if (getPrevAstarNodeDir({currGrid.x(), currGrid.y(), currGrid.z()})

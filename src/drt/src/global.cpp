@@ -116,6 +116,8 @@ int MISALIGNMENTCOST = 8;
 int CONGCOST = 8;
 int HISTCOST = 32;
 
+bool TIMEOUT_REACHED = false;
+
 namespace fr {
 
 ostream& operator<<(ostream& os, const frRect& pinFigIn)

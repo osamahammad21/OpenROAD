@@ -63,9 +63,19 @@ class RoutingCallBack : public dst::JobCallBack
   RoutingCallBack(triton_route::TritonRoute* router,
                   dst::Distributed* dist,
                   utl::Logger* logger)
-      : router_(router), dist_(dist), logger_(logger), init_(true)
+      : router_(router), dist_(dist), logger_(logger), init_(true), routing_pool_(1)
   {
   }
+  void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override
+  {
+    TIMEOUT_REACHED = true;
+    while(TIMEOUT_REACHED)
+      sleep(1);
+    dst::JobMessage result(dst::JobMessage::SUCCESS);
+    dist_->sendResult(result, sock);
+    sock.close();
+  }
+
   void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
     if (msg.getJobType() == dst::JobMessage::ROUTING_INITIAL)
@@ -122,35 +132,40 @@ class RoutingCallBack : public dst::JobCallBack
     reply_pool.join();
     sendResult(results, sock, true, cnt);
   }
-
-  void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
+  void handleStubbornTilesJobHelper(MLJobDescription desc)
   {
-    MLJobDescription* desc
-        = static_cast<MLJobDescription*>(msg.getJobDescription());
-    {
-      dst::JobMessage result(dst::JobMessage::NONE);
-      dist_->sendResult(result, sock);
-      sock.close();
-    }
-    router_->updateGlobals(desc->init_globals_path_.c_str());
-    router_->resetDb(desc->odb_path_.c_str());
-    router_->updateDesign(desc->updates_path_.c_str());
-    router_->updateGlobals(desc->worker_globals_path_.c_str());
-    std::ifstream viaDataFile(desc->via_data_path_,
+    router_->updateGlobals(desc.init_globals_path_.c_str());
+    router_->resetDb(desc.odb_path_.c_str());
+    router_->updateDesign(desc.updates_path_.c_str());
+    router_->updateGlobals(desc.worker_globals_path_.c_str());
+    std::ifstream viaDataFile(desc.via_data_path_,
                               std::ios::binary);
     frIArchive ar(viaDataFile);
     ar >> via_data_;
-    std::ifstream workerFile(desc->worker_path_,
+    std::ifstream workerFile(desc.worker_path_,
                            std::ios::binary);
     std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
                           std::istreambuf_iterator<char>());
     workerFile.close();
 
     omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
-    auto strategies = desc->strategies_;
+    auto strategies = desc.strategies_;
     #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < strategies.size(); i++) {
       auto args = strategies.at(i);
+      if(TIMEOUT_REACHED)
+      {
+        WorkerResult result;
+        result.id = args.offset;
+        result.numOfViolations = -1;
+        std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
+        resultDesc->setResult(result);
+        dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
+        resultMsg.setJobDescription(std::move(resultDesc));
+        dst::JobMessage dummy;
+        dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
+        continue;
+      }
       auto worker = FlexDRWorker::load(workerStr, logger_, router_->getDesign(), nullptr); 
       worker->setMazeEndIter(args.mazeEndIter);
       worker->setMarkerCost(args.workerMarkerCost);
@@ -165,7 +180,10 @@ class RoutingCallBack : public dst::JobCallBack
       seconds time_span = duration_cast<seconds>(t1 - t0);
       WorkerResult result;
       result.id = args.offset;
-      result.numOfViolations = worker->getBestNumMarkers();
+      if(TIMEOUT_REACHED)
+        result.numOfViolations = -1;
+      else
+        result.numOfViolations = worker->getBestNumMarkers();
       result.runTime = time_span.count();
       #pragma omp critical
       debugPrint(logger_,
@@ -182,9 +200,24 @@ class RoutingCallBack : public dst::JobCallBack
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
       resultMsg.setJobDescription(std::move(resultDesc));
       dst::JobMessage dummy;
-      dist_->sendJob(resultMsg, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
+      dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
     }
-    logger_->report("########Done########");
+    if(TIMEOUT_REACHED)
+      logger_->report("########TIMEOUT########");
+    else
+      logger_->report("########Done########");
+    TIMEOUT_REACHED = false;
+  }
+  void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
+  {
+    {
+      dst::JobMessage result(dst::JobMessage::NONE);
+      dist_->sendResult(result, sock);
+      sock.close();
+    }
+    MLJobDescription* desc
+        = static_cast<MLJobDescription*>(msg.getJobDescription());
+    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper, this, *desc));
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override
@@ -252,6 +285,7 @@ class RoutingCallBack : public dst::JobCallBack
   std::string globals_path_;
   bool init_;
   FlexDRViaData via_data_;
+  asio::thread_pool routing_pool_;
 };
 
 }  // namespace fr
