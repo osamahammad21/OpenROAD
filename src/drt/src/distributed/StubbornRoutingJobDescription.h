@@ -1,6 +1,6 @@
-/* Authors: Mahfouz-z */
+/* Authors: Osama */
 /*
- * Copyright (c) 2022, The Regents of the University of California
+ * Copyright (c) 2021, The Regents of the University of California
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,31 +26,46 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "dst/Distributed.h"
-#include "dst/JobCallBack.h"
+#pragma once
+#include <boost/serialization/base_object.hpp>
+#include <string>
+
 #include "dst/JobMessage.h"
+#include "dr/FlexDR.h"
+namespace boost::serialization {
+class access;
+}
+namespace fr {
 
-using namespace dst;
-
-class HelperCallBack : public dst::JobCallBack
+class StubbornRoutingJobDescription : public dst::JobDescription
 {
  public:
-  HelperCallBack(dst::Distributed* dist) : dist_(dist) {}
-  void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
+  StubbornRoutingJobDescription() : reply_port_(0) {}
+  void setWorkers(const std::vector<std::tuple<int, std::string, SearchRepairArgs>>& workers)
   {
-    JobMessage replyMsg;
-    if (msg.getJobType() == JobMessage::JobType::ROUTING_INITIAL)
-      replyMsg.setJobType(JobMessage::JobType::SUCCESS);
-    else
-      replyMsg.setJobType(JobMessage::JobType::ERROR);
-    dist_->sendResult(replyMsg, sock);
+    workers_ = workers;
   }
-
-  void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onRoutingResultReceived(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onRoutingResultRequested(dst::JobMessage& msg, dst::socket& sock) override {}
+  void setReplyPort(ushort value) { reply_port_ = value; }
+  void setReplyHost(const std::string& value) { reply_host_ = value; }
+  const std::vector<std::tuple<int, std::string, SearchRepairArgs>>& getWorkers()
+  {
+    return workers_;
+  }
+  ushort getReplyPort() const { return reply_port_; }
+  std::string getReplyHost() const { return reply_host_; }
 
  private:
-  dst::Distributed* dist_;
+  std::vector<std::tuple<int, std::string, SearchRepairArgs>> workers_;
+  ushort reply_port_;
+  std::string reply_host_;
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
+    (ar) & workers_;
+    (ar) & reply_port_;
+    (ar) & reply_host_;
+  }
+  friend class boost::serialization::access;
 };
+}  // namespace fr

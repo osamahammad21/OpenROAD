@@ -39,6 +39,8 @@
 
 #include "db/infra/frTime.h"
 #include "distributed/RoutingJobDescription.h"
+#include "distributed/StubbornRoutingJobDescription.h"
+#include "distributed/RoutingResultDescription.h"
 #include "distributed/MLJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR.h"
@@ -63,29 +65,64 @@ class RoutingCallBack : public dst::JobCallBack
   RoutingCallBack(triton_route::TritonRoute* router,
                   dst::Distributed* dist,
                   utl::Logger* logger)
-      : router_(router), dist_(dist), logger_(logger), init_(true), routing_pool_(1)
+      : router_(router), dist_(dist), logger_(logger), init_(true), routing_pool_(1), busy_(false)
   {
   }
+
   void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override
   {
     TIMEOUT_REACHED = true;
-    while(TIMEOUT_REACHED)
+    while(busy_)
       sleep(1);
+    TIMEOUT_REACHED = false;
     dst::JobMessage result(dst::JobMessage::SUCCESS);
     dist_->sendResult(result, sock);
     sock.close();
   }
 
+  void onRoutingResultRequested(dst::JobMessage& msg, dst::socket& sock) override
+  {
+    RoutingResultDescription* desc = static_cast<RoutingResultDescription*>(msg.getJobDescription());
+    {
+      dst::JobMessage result(dst::JobMessage::NONE);
+      dist_->sendResult(result, sock);
+      sock.close();
+    }
+    auto requestedResult = desc->getResult();
+    if(keep_results_.find(requestedResult.id) != keep_results_.end())
+    {
+      auto& currBestResult = keep_results_[requestedResult.id];
+      bool valid = currBestResult->getMazeEndIter() == requestedResult.args.mazeEndIter;
+      valid &= currBestResult->getRipupMode() == requestedResult.args.ripupMode;
+      valid &= currBestResult->getMarkerCost() == requestedResult.args.workerMarkerCost;
+      valid &= currBestResult->getDrcCost() == requestedResult.args.workerDRCCost;
+      valid &= currBestResult->isFollowGuide() == requestedResult.args.followGuide;
+      if(valid)
+      {
+        dst::JobMessage result(dst::JobMessage::ROUTING_STUBBORN_RESULT), dummy;
+        auto resultDesc = std::make_unique<RoutingResultDescription>();
+        WorkerResult workerResult;
+        workerResult.workerStr = currBestResult->getSerializedWorker();
+        workerResult.id = requestedResult.id;
+        resultDesc->setResult(workerResult);
+        result.setJobDescription(std::move(resultDesc));
+        dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
+      }
+    }
+  }
+
   void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
+    busy_ = true;
     if (msg.getJobType() == dst::JobMessage::ROUTING_INITIAL)
       handleInitialRoutingJob(msg, sock);
     else if (msg.getJobType() == dst::JobMessage::ROUTING_STUBBORN)
       handleStubbornTilesJob(msg, sock);
   }
-  void onRoutingStubbornResultReceived(dst::JobMessage& msg, dst::socket& sock) override
+
+  void onRoutingResultReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
-    MLJobDescription* desc = static_cast<MLJobDescription*>(msg.getJobDescription());
+    RoutingResultDescription* desc = static_cast<RoutingResultDescription*>(msg.getJobDescription());
     router_->addWorkerResults({desc->getResult()});
     {
       dst::JobMessage result(dst::JobMessage::NONE);
@@ -131,8 +168,10 @@ class RoutingCallBack : public dst::JobCallBack
     }
     reply_pool.join();
     sendResult(results, sock, true, cnt);
+    busy_ = false;
   }
-  void handleStubbornTilesJobHelper(MLJobDescription desc)
+  
+  void handleStubbornTilesJobHelper2(MLJobDescription desc)
   {
     router_->updateGlobals(desc.init_globals_path_.c_str());
     router_->resetDb(desc.odb_path_.c_str());
@@ -188,13 +227,13 @@ class RoutingCallBack : public dst::JobCallBack
       #pragma omp critical
       debugPrint(logger_,
                  utl::DRT,
-                 "autotuner",
+                 "distributed",
                  1,
                  "Number of markers {} elapsed time {:02}:{:02}:{:02}", 
                  result.numOfViolations,
                  frTime::getHours(result.runTime),
                  frTime::getMinutes(result.runTime),
-                 frTime::getSeconds(result.runTime));     
+                 frTime::getSeconds(result.runTime));
       std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
       resultDesc->setResult(result);
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
@@ -206,7 +245,83 @@ class RoutingCallBack : public dst::JobCallBack
       logger_->report("########TIMEOUT########");
     else
       logger_->report("########Done########");
-    TIMEOUT_REACHED = false;
+    busy_ = false;
+  }
+  void handleStubbornTilesJobHelper(StubbornRoutingJobDescription desc)
+  {
+    omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
+    #pragma omp parallel for schedule(dynamic)
+    for (int i = 0; i < desc.getWorkers().size(); i++) {\
+      auto idx = std::get<0>(desc.getWorkers().at(i));
+      auto workerStr = std::get<1>(desc.getWorkers().at(i));
+      auto args = std::get<2>(desc.getWorkers().at(i));
+      if(TIMEOUT_REACHED)
+      {
+        WorkerResult result;
+        result.id = idx;
+        result.numOfViolations = -1;
+        result.args = args;
+        std::unique_ptr<RoutingResultDescription> resultDesc = std::make_unique<RoutingResultDescription>();
+        resultDesc->setResult(result);
+        dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
+        resultMsg.setJobDescription(std::move(resultDesc));
+        dst::JobMessage dummy;
+        dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
+        continue;
+      }
+      auto worker = FlexDRWorker::load(workerStr, logger_, router_->getDesign(), nullptr); 
+      worker->setMazeEndIter(args.mazeEndIter);
+      worker->setMarkerCost(args.workerMarkerCost);
+      worker->setDrcCost(args.workerDRCCost);
+      worker->setRipupMode(args.ripupMode);
+      worker->setFollowGuide((args.followGuide));
+      worker->setViaData(&via_data_);
+
+      high_resolution_clock::time_point t0 = high_resolution_clock::now();
+      worker->reloadedMain();
+      high_resolution_clock::time_point t1 = high_resolution_clock::now();
+      seconds time_span = duration_cast<seconds>(t1 - t0);
+      WorkerResult result;
+      result.id = idx;
+      if(TIMEOUT_REACHED)
+        result.numOfViolations = -1;
+      else
+        result.numOfViolations = worker->getBestNumMarkers();
+      result.runTime = time_span.count();
+      result.args = args;
+      #pragma omp critical
+      debugPrint(logger_,
+                 utl::DRT,
+                 "autotuner",
+                 1,
+                 "Number of markers {} elapsed time {:02}:{:02}:{:02}", 
+                 result.numOfViolations,
+                 frTime::getHours(result.runTime),
+                 frTime::getMinutes(result.runTime),
+                 frTime::getSeconds(result.runTime));     
+      std::unique_ptr<RoutingResultDescription> resultDesc = std::make_unique<RoutingResultDescription>();
+      resultDesc->setResult(result);
+      dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
+      resultMsg.setJobDescription(std::move(resultDesc));
+      dst::JobMessage dummy;
+      dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
+      #pragma omp critical
+      if(result.numOfViolations != -1)
+      {
+        if(keep_results_.find(idx) == keep_results_.end())
+        {
+          keep_results_[idx] = std::move(worker);
+        } else if (result.numOfViolations < keep_results_[idx]->getBestNumMarkers())
+        {
+          keep_results_[idx] = std::move(worker);
+        }
+      }
+    }
+    if(TIMEOUT_REACHED)
+      logger_->report("########TIMEOUT########");
+    else
+      logger_->report("########Done########");
+    busy_ = false;
   }
   void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
   {
@@ -215,8 +330,9 @@ class RoutingCallBack : public dst::JobCallBack
       dist_->sendResult(result, sock);
       sock.close();
     }
-    MLJobDescription* desc
-        = static_cast<MLJobDescription*>(msg.getJobDescription());
+    keep_results_.clear();
+    StubbornRoutingJobDescription* desc
+      = static_cast<StubbornRoutingJobDescription*>(msg.getJobDescription());
     asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper, this, *desc));
   }
 
@@ -286,6 +402,8 @@ class RoutingCallBack : public dst::JobCallBack
   bool init_;
   FlexDRViaData via_data_;
   asio::thread_pool routing_pool_;
+  std::map<int, std::unique_ptr<FlexDRWorker>> keep_results_;
+  bool busy_;
 };
 
 }  // namespace fr

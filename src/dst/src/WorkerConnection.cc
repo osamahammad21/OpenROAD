@@ -98,13 +98,19 @@ void WorkerConnection::handle_read(boost::system::error_code const& err,
       }
       case JobMessage::ROUTING_STUBBORN_RESULT: {
         for (auto& cb : dist_->getCallBacks()) {
-          cb->onRoutingStubbornResultReceived(msg_, sock_);
+          cb->onRoutingResultReceived(msg_, sock_);
         }
         break;
       }
       case JobMessage::TIMEOUT: {
         for (auto& cb : dist_->getCallBacks()) {
           cb->onTimeOut(msg_, sock_);
+        }
+        break;
+      }
+      case JobMessage::FETCH_ROUTING_RESULT: {
+        for (auto& cb : dist_->getCallBacks()) {
+          cb->onRoutingResultRequested(msg_, sock_);
         }
         break;
       }

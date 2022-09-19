@@ -319,7 +319,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
   std::vector<SearchRepairArgs> strategies;
   if(distributed_)
     dist_->runWorker(local_ip_.c_str(), local_port_, true);
-  for(auto mazeEndIter : {3, 8 ,16, 32, 64})
+  for(auto mazeEndIter : {3, 8 ,16})
   {
     for(auto markerCost : {2, 4, 8, 16, 32, 64})
     {
@@ -904,7 +904,6 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
       serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_UPDATES");
     const auto& designUpdates = design_->getUpdates();
     omp_set_num_threads(MAX_THREADS);
-    std::vector<std::string> updates(designUpdates.size());
     #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < designUpdates.size(); i++) {
       updates[i] = fmt::format("{}updates_{}.bin", shared_volume_, i);

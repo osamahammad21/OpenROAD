@@ -1,6 +1,6 @@
-/* Authors: Mahfouz-z */
+/* Authors: Osama */
 /*
- * Copyright (c) 2022, The Regents of the University of California
+ * Copyright (c) 2021, The Regents of the University of California
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,31 +26,41 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "dst/Distributed.h"
-#include "dst/JobCallBack.h"
+#pragma once
+#include <boost/serialization/base_object.hpp>
+#include <string>
+
 #include "dst/JobMessage.h"
+#include "dr/FlexDR.h"
+#include "WorkerResult.h"
+namespace boost::serialization {
+class access;
+}
+namespace fr {
 
-using namespace dst;
-
-class HelperCallBack : public dst::JobCallBack
+class RoutingResultDescription : public dst::JobDescription
 {
  public:
-  HelperCallBack(dst::Distributed* dist) : dist_(dist) {}
-  void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
-  {
-    JobMessage replyMsg;
-    if (msg.getJobType() == JobMessage::JobType::ROUTING_INITIAL)
-      replyMsg.setJobType(JobMessage::JobType::SUCCESS);
-    else
-      replyMsg.setJobType(JobMessage::JobType::ERROR);
-    dist_->sendResult(replyMsg, sock);
-  }
-
-  void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onRoutingResultReceived(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override {}
-  void onRoutingResultRequested(dst::JobMessage& msg, dst::socket& sock) override {}
+  RoutingResultDescription() : reply_port_(0) {}
+  void setResult(const WorkerResult& result) { result_ = result; }
+  void setReplyPort(ushort value) { reply_port_ = value; }
+  void setReplyHost(const std::string& value) { reply_host_ = value; }
+  ushort getReplyPort() const { return reply_port_; }
+  std::string getReplyHost() const { return reply_host_; }
+  WorkerResult getResult() const { return result_; }
 
  private:
-  dst::Distributed* dist_;
+  WorkerResult result_;
+  ushort reply_port_;
+  std::string reply_host_;
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
+    (ar) & result_;
+    (ar) & reply_port_;
+    (ar) & reply_host_;
+  }
+  friend class boost::serialization::access;
 };
+}  // namespace fr

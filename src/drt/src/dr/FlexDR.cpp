@@ -43,6 +43,8 @@
 
 #include "db/infra/frTime.h"
 #include "distributed/RoutingJobDescription.h"
+#include "distributed/StubbornRoutingJobDescription.h"
+#include "distributed/RoutingResultDescription.h"
 #include "distributed/MLJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR_conn.h"
@@ -58,12 +60,15 @@
 
 using namespace std;
 using namespace fr;
+using namespace std::chrono;
 
 using utl::ThreadException;
 
 BOOST_CLASS_EXPORT(RoutingJobDescription)
 BOOST_CLASS_EXPORT(MLJobDescription)
 BOOST_CLASS_EXPORT(SearchRepairArgs)
+BOOST_CLASS_EXPORT(StubbornRoutingJobDescription)
+BOOST_CLASS_EXPORT(RoutingResultDescription)
 
 
 enum class SerializationType
@@ -162,7 +167,6 @@ void serializeUpdates(const std::vector<std::vector<drUpdate>>& updates,
 int FlexDRWorker::main(frDesign* design)
 {
   ProfileTask profile("DRW:main");
-  using namespace std::chrono;
   high_resolution_clock::time_point t0 = high_resolution_clock::now();
   auto micronPerDBU = 1.0 / getTech()->getDBUPerUU();
   if (VERBOSE > 1) {
@@ -1576,6 +1580,25 @@ void FlexDR::getBatchInfo(int& batchStepX, int& batchStepY)
   batchStepX = 2;
   batchStepY = 2;
 }
+static std::vector<SearchRepairArgs> sweepingStrategies()
+{
+  std::vector<SearchRepairArgs> strategies;
+  for(auto mazeEndIter : {3, 8 ,16})
+  {
+    for(auto markerCost : {2, 4, 8, 16, 32, 64})
+    {
+      for(auto drcCost : {2, 4, 8, 16, 32, 64})
+      {
+        for(auto followGuide : {true, false})
+        {
+          SearchRepairArgs args = {7, (int) strategies.size(), mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
+          strategies.push_back(args);
+        }
+      }
+    }
+  }
+  return strategies;
+}
 
 void FlexDR::searchRepair(const SearchRepairArgs& args)
 {
@@ -1698,6 +1721,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
   for (auto& workerBatch : workers) {
     ProfileTask profile("DR:checkerboard");
     for (auto& workersInBatch : workerBatch) {
+      int batchRoutableWorkUnits = 0;
       {
         const std::string batch_name = std::string("DR:batch<")
                                        + std::to_string(workersInBatch.size())
@@ -1716,15 +1740,17 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
           ProfileTask task("DIST: PROCESS_BATCH");
           // multi thread
           ThreadException exception;
-#pragma omp parallel for schedule(dynamic)
+          #pragma omp parallel for schedule(dynamic)
           for (int i = 0; i < (int) workersInBatch.size(); i++) {
             try {
               if (dist_on_)
                 workersInBatch[i]->distributedMain(getDesign());
               else
                 workersInBatch[i]->main(getDesign());
-#pragma omp critical
+                #pragma omp critical
                 {
+                  if(!workersInBatch[i]->isSkipRouting())
+                    batchRoutableWorkUnits++;
                   cnt++;
                   if (VERBOSE > 0) {
                     if (cnt * 1.0 / tot >= prev_perc / 100.0 + 0.1
@@ -1747,36 +1773,51 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
             }
           }
           exception.rethrow();
-          if (dist_on_) {
-            int j = 0;
-            std::vector<std::vector<std::pair<int, FlexDRWorker*>>>
-                distWorkerBatches(router_->getCloudSize());
-            for (int i = 0; i < workersInBatch.size(); i++) {
-              auto worker = workersInBatch.at(i).get();
-              if (!worker->isSkipRouting()) {
-                distWorkerBatches[j].push_back({i, worker});
-                j = (j + 1) % router_->getCloudSize();
-              }
-            }
+          if (dist_on_ && batchRoutableWorkUnits > 0) {
+            debugPrint(logger_, utl::DRT, "distributed", 1, "Batch Routable Workers {}",batchRoutableWorkUnits);
+            if(args.ripupMode == 0 && batchRoutableWorkUnits * sweepingStrategies().size() <= router_->getCloudSize() * 4)
             {
-              ProfileTask task("DIST: SERIALIZE+SEND");
-#pragma omp parallel for schedule(dynamic)
-              for (int i = 0; i < distWorkerBatches.size(); i++)
-                sendWorkers(distWorkerBatches.at(i), workersInBatch);
-            }
-            logger_->report("    Received Batches:{}.", t);
-            std::vector<std::pair<int, std::string>> workers;
-            router_->getWorkerResults(workers);
-            {
-              ProfileTask task("DIST: DESERIALIZING_BATCH");
-#pragma omp parallel for schedule(dynamic)
-              for (int i = 0; i < workers.size(); i++) {
-                deserializeWorker(workersInBatch.at(workers.at(i).first).get(),
-                                  design_,
-                                  workers.at(i).second);
+              //Stubborn Tiles
+              std::vector<std::pair<int, FlexDRWorker*>> routableWorkers;
+              for (int i = 0; i < workersInBatch.size(); i++) {
+                auto worker = workersInBatch.at(i).get();
+                if (!worker->isSkipRouting()) {
+                  routableWorkers.push_back({i, worker});
+                }
               }
+              distributeStubbornTiles(routableWorkers, workersInBatch);
+
+            } else {
+              int j = 0;
+              std::vector<std::vector<std::pair<int, FlexDRWorker*>>>
+                  distWorkerBatches(router_->getCloudSize());
+              for (int i = 0; i < workersInBatch.size(); i++) {
+                auto worker = workersInBatch.at(i).get();
+                if (!worker->isSkipRouting()) {
+                  distWorkerBatches[j].push_back({i, worker});
+                  j = (j + 1) % router_->getCloudSize();
+                }
+              }
+              {
+                ProfileTask task("DIST: SERIALIZE+SEND");
+                #pragma omp parallel for schedule(dynamic)
+                for (int i = 0; i < distWorkerBatches.size(); i++)
+                  sendWorkers(distWorkerBatches.at(i), workersInBatch);
+              }
+              logger_->report("    Received Batches:{}.", t);
+              std::vector<std::pair<int, std::string>> workers;
+              router_->getWorkerResults(workers);
+              {
+                ProfileTask task("DIST: DESERIALIZING_BATCH");
+                #pragma omp parallel for schedule(dynamic)
+                for (int i = 0; i < workers.size(); i++) {
+                  deserializeWorker(workersInBatch.at(workers.at(i).first).get(),
+                                    design_,
+                                    workers.at(i).second);
+                }
+              }
+              logger_->report("    Deserialized Batches:{}.", t); 
             }
-            logger_->report("    Deserialized Batches:{}.", t);
           }
         }
       }
@@ -1846,7 +1887,126 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
                        design_->getTopBlock()->getMarkers());
   }
 }
+void FlexDR::distributeStubbornTiles(
+          std::vector<std::pair<int, FlexDRWorker*>> routableWorkers, 
+          std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch)
+{
+  //Creating Jobs for each worker in cloud (according to size)
+  int j = 0;
+  int totSz = 0;
+  std::vector<std::vector<std::tuple<int, std::string, SearchRepairArgs>>> distWorkerBatches(router_->getCloudSize());
+  for(auto& [i, worker] : routableWorkers)
+  {
+    std::string workerStr;
+    serializeWorker(worker, workerStr);
+    for(auto args : sweepingStrategies())
+    {
+      distWorkerBatches[j].push_back({i, workerStr, args});
+      j = (j + 1) % router_->getCloudSize();
+      totSz++;
+    }
+  }
+  //Send JOBs
+  for(int i = 0; i < router_->getCloudSize(); i++)
+  {
+    auto& remote_batch = distWorkerBatches.at(i);
+    if (remote_batch.empty())
+      continue;
+    {
+      dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN),
+          result(dst::JobMessage::NONE);
+      std::unique_ptr<dst::JobDescription> desc
+          = std::make_unique<StubbornRoutingJobDescription>();
+      StubbornRoutingJobDescription* rjd
+          = static_cast<StubbornRoutingJobDescription*>(desc.get());
+      rjd->setWorkers(remote_batch);
+      rjd->setReplyPort(router_->local_port_);
+      rjd->setReplyHost(router_->local_ip_);
+      msg.setJobDescription(std::move(desc));
+      bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+      if (!ok) {
+        logger_->error(utl::DRT, 502, "Sending worker {} failed");
+      }
+    }
+  }
+  //Run Workers Locally
+  high_resolution_clock::time_point t0 = high_resolution_clock::now();
+  #pragma omp parallel for schedule(dynamic)
+  for(int i = 0; i < routableWorkers.size(); i++)
+  {
+    routableWorkers[i].second->reloadedMain();
+  }
+  high_resolution_clock::time_point t1 = high_resolution_clock::now();
+  seconds time_span = duration_cast<seconds>(t1 - t0);
 
+  //Send TIMEOUT
+  {
+    if(router_->getWorkerResultsSize() != totSz)
+      sleep((int) (0.1 * time_span.count()));
+    dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+    dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+  }
+  //Wait For Results
+  std::map<int, std::pair<SearchRepairArgs, int>> resultMap;
+  while(totSz)
+  {
+    std::vector<WorkerResult> results;
+    if(!router_->getWorkerResults(results))
+    {
+      sleep(1);
+      continue;
+    }
+    totSz -= results.size();
+    for(auto result : results)
+    {
+      if (result.numOfViolations == -1)
+        continue;
+      if (resultMap.find(result.id) == resultMap.end())
+        resultMap[result.id] = {SearchRepairArgs(), INT_MAX};
+      if (result.numOfViolations < resultMap[result.id].second)
+        resultMap[result.id] = {result.args, result.numOfViolations}; 
+    }
+  }
+  //Choose Best Result
+  for(auto& [idx, worker] : routableWorkers)
+  {
+    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].second > worker->getBestNumMarkers())
+    {
+      resultMap.erase(idx);
+    }
+  }
+  //Fetch Best Results
+  for(auto& [idx, bestResult] : resultMap)
+  {
+    debugPrint(logger_, utl::DRT, "distributed", 1, "Found remote result with {} markers better than {}", bestResult.second, workersInBatch.at(idx)->getBestNumMarkers());
+    dst::JobMessage msg(dst::JobMessage::FETCH_ROUTING_RESULT, dst::JobMessage::BROADCAST), dummy;
+    auto desc = std::make_unique<RoutingResultDescription>();
+    desc->setReplyPort(router_->local_port_);
+    desc->setReplyHost(router_->local_ip_);
+    WorkerResult result;
+    result.id = idx;
+    result.args = bestResult.first;
+    desc->setResult(result);
+    msg.setJobDescription(std::move(desc));
+    dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, dummy);
+  }
+  
+  while(!resultMap.empty())
+  {
+    std::vector<WorkerResult> results;
+    if(!router_->getWorkerResults(results))
+    {
+      sleep(1);
+      continue;
+    }
+    for(auto result : results)
+    {
+      deserializeWorker(workersInBatch.at(result.id).get(), design_, result.workerStr);
+      resultMap.erase(result.id);
+    }
+  }
+  
+}
 void FlexDR::end(bool done)
 {
   if (done && DRC_RPT_FILE != string("")) {
@@ -2199,7 +2359,10 @@ int FlexDR::main()
   ProfileTask profile("DR:main");
   init();
   frTime t;
-
+  if(dist_on_)
+  {
+    dist_->runWorker(router_->local_ip_.c_str(), router_->local_port_, true);
+  }
   for (auto args : strategy()) {
     if (iter_ < 3)
       FIXEDSHAPECOST = ROUTESHAPECOST;

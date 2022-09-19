@@ -52,6 +52,8 @@ sta::define_cmd_args "detailed_route" {
     [-distributed]
     [-remote_host rhost]
     [-remote_port rport]
+    [-local_host rhost]
+    [-local_port rport]
     [-shared_volume vol]
     [-cloud_size sz]
     [-clean_patches]
@@ -65,7 +67,7 @@ proc detailed_route { args } {
     keys {-param -output_maze -output_drc -output_cmap -output_guide_coverage \
       -db_process_node -droute_end_iter -via_in_pin_bottom_layer \
       -via_in_pin_top_layer -or_seed -or_k -bottom_routing_layer \
-      -top_routing_layer -verbose -remote_host -remote_port -shared_volume -cloud_size -min_access_points} \
+      -top_routing_layer -verbose -remote_host -remote_port -local_host -local_port -shared_volume -cloud_size -min_access_points} \
     flags {-disable_via_gen -distributed -clean_patches -no_pin_access -single_step_dr -save_guide_updates}
   sta::check_argc_eq0 "detailed_route" $args
 
@@ -166,6 +168,16 @@ proc detailed_route { args } {
       } else {
         utl::error DRT 507 "-remote_port is required for distributed routing."
       }
+      if { [info exists keys(-local_host)] } {
+        set lhost $keys(-local_host)
+      } else {
+        utl::error DRT 527 "-local_host is required for distributed routing."
+      }
+      if { [info exists keys(-local_port)] } {
+        set lport $keys(-local_port)
+      } else {
+        utl::error DRT 528 "-local_port is required for distributed routing."
+      }
       if { [info exists keys(-shared_volume)] } {
         set vol $keys(-shared_volume)
       } else {
@@ -176,7 +188,7 @@ proc detailed_route { args } {
       } else {
         utl::error DRT 516 "-cloud_size is required for distributed routing."
       }
-      drt::detailed_route_distributed $rhost $rport "" 0 $vol $cloudsz
+      drt::detailed_route_distributed $rhost $rport $lhost $lport $vol $cloudsz
     }
     if { [info exists keys(-min_access_points)] } {
       sta::check_cardinal "-min_access_points" $keys(-min_access_points)

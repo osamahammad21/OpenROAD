@@ -190,6 +190,9 @@ class FlexDR
   void sendWorkers(
       const std::vector<std::pair<int, FlexDRWorker*>>& remote_batch,
       std::vector<std::unique_ptr<FlexDRWorker>>& batch);
+  
+  void distributeStubbornTiles(std::vector<std::pair<int, FlexDRWorker*>> routableWorkers, 
+                               std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch);
 
   void reportGuideCoverage();
  private:
@@ -492,6 +495,8 @@ class FlexDRWorker
   FlexGCWorker* getGCWorker() { return gcWorker_.get(); }
   const FlexDRViaData* getViaData() const { return via_data_; }
   const FlexGridGraph& getGridGraph() const { return gridGraph_; }
+  int getMarkerCost() const { return workerMarkerCost_; }
+  int getDrcCost() const { return workerDRCCost_; }
   // others
   int main(frDesign* design);
   void distributedMain(frDesign* design);

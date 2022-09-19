@@ -27,6 +27,7 @@
  */
 
 #pragma once
+#include "dr/FlexDR.h"
 
 namespace boost::serialization {
 class access;
@@ -39,6 +40,8 @@ struct WorkerResult
   int id;
   int numOfViolations;
   int64_t runTime;
+  SearchRepairArgs args;
+  std::string workerStr;
   WorkerResult() : id(-1), numOfViolations(-1), runTime(-1) {}
 
  private:
@@ -48,6 +51,8 @@ struct WorkerResult
     (ar) & id;
     (ar) & numOfViolations;
     (ar) & runTime;
+    (ar) & args;
+    (ar) & workerStr;
   }
   friend class boost::serialization::access;
 };

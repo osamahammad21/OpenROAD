@@ -17,7 +17,9 @@ detailed_route -output_drc results/aes_nangate45_distributed.output.drc.rpt \
 	             -distributed \
 	             -remote_host 127.0.0.1 \
 	             -remote_port 1234 \
-                 -cloud_size 2 \
+               -local_host 127.0.0.1 \
+               -local_port 30000 \
+               -cloud_size 2 \
                -shared_volume results 
 exec kill $server1
 exec kill $server2
