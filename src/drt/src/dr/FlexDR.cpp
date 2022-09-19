@@ -1970,7 +1970,7 @@ void FlexDR::distributeStubbornTiles(
   //Choose Best Result
   for(auto& [idx, worker] : routableWorkers)
   {
-    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].second > worker->getBestNumMarkers())
+    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].second >= worker->getBestNumMarkers())
     {
       resultMap.erase(idx);
     }
