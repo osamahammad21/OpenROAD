@@ -91,22 +91,24 @@ class RoutingCallBack : public dst::JobCallBack
     auto requestedResult = desc->getResult();
     if(keep_results_.find(requestedResult.id) != keep_results_.end())
     {
-      auto& currBestResult = keep_results_[requestedResult.id];
-      bool valid = currBestResult->getMazeEndIter() == requestedResult.args.mazeEndIter;
-      valid &= currBestResult->getRipupMode() == requestedResult.args.ripupMode;
-      valid &= currBestResult->getMarkerCost() == requestedResult.args.workerMarkerCost;
-      valid &= currBestResult->getDrcCost() == requestedResult.args.workerDRCCost;
-      valid &= currBestResult->isFollowGuide() == requestedResult.args.followGuide;
-      if(valid)
+      for(auto& keep_result : keep_results_[requestedResult.id])
       {
-        dst::JobMessage result(dst::JobMessage::ROUTING_STUBBORN_RESULT), dummy;
-        auto resultDesc = std::make_unique<RoutingResultDescription>();
-        WorkerResult workerResult;
-        workerResult.workerStr = currBestResult->getSerializedWorker();
-        workerResult.id = requestedResult.id;
-        resultDesc->setResult(workerResult);
-        result.setJobDescription(std::move(resultDesc));
-        dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
+        bool valid = keep_result->getMazeEndIter() == requestedResult.args.mazeEndIter;
+        valid &= keep_result->getMarkerCost() == requestedResult.args.workerMarkerCost;
+        valid &= keep_result->getDrcCost() == requestedResult.args.workerDRCCost;
+        valid &= keep_result->isFollowGuide() == requestedResult.args.followGuide;
+        if(valid)
+        {
+          dst::JobMessage result(dst::JobMessage::ROUTING_STUBBORN_RESULT), dummy;
+          auto resultDesc = std::make_unique<RoutingResultDescription>();
+          WorkerResult workerResult;
+          workerResult.workerStr = keep_result->getSerializedWorker();
+          workerResult.id = requestedResult.id;
+          resultDesc->setResult(workerResult);
+          result.setJobDescription(std::move(resultDesc));
+          dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
+          return;
+        }
       }
     }
   }
@@ -310,10 +312,17 @@ class RoutingCallBack : public dst::JobCallBack
       {
         if(keep_results_.find(idx) == keep_results_.end())
         {
-          keep_results_[idx] = std::move(worker);
-        } else if (result.numOfViolations < keep_results_[idx]->getBestNumMarkers())
+          keep_results_[idx].push_back(std::move(worker));
+        } else
         {
-          keep_results_[idx] = std::move(worker);
+          if(keep_results_[idx][0]->getBestNumMarkers() > result.numOfViolations)
+          {
+            keep_results_[idx].clear();
+            keep_results_[idx].push_back(std::move(worker));
+          } else if(keep_results_[idx][0]->getBestNumMarkers() == result.numOfViolations)
+          {
+            keep_results_[idx].push_back(std::move(worker));
+          }
         }
       }
     }
@@ -402,7 +411,7 @@ class RoutingCallBack : public dst::JobCallBack
   bool init_;
   FlexDRViaData via_data_;
   asio::thread_pool routing_pool_;
-  std::map<int, std::unique_ptr<FlexDRWorker>> keep_results_;
+  std::map<int, std::vector<std::unique_ptr<FlexDRWorker>>> keep_results_;
   bool busy_;
 };
 

@@ -69,6 +69,7 @@ BOOST_CLASS_EXPORT(MLJobDescription)
 BOOST_CLASS_EXPORT(SearchRepairArgs)
 BOOST_CLASS_EXPORT(StubbornRoutingJobDescription)
 BOOST_CLASS_EXPORT(RoutingResultDescription)
+BOOST_CLASS_EXPORT(WorkerResult)
 
 
 enum class SerializationType
@@ -1775,7 +1776,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
           exception.rethrow();
           if (dist_on_ && batchRoutableWorkUnits > 0) {
             debugPrint(logger_, utl::DRT, "distributed", 1, "Batch Routable Workers {}",batchRoutableWorkUnits);
-            if(args.ripupMode == 0 && batchRoutableWorkUnits * sweepingStrategies().size() <= router_->getCloudSize() * 4)
+            if(args.ripupMode == 0 && batchRoutableWorkUnits * sweepingStrategies().size() <= router_->getCloudSize() * 95)
             {
               //Stubborn Tiles
               std::vector<std::pair<int, FlexDRWorker*>> routableWorkers;

@@ -42,7 +42,7 @@ struct WorkerResult
   int64_t runTime;
   SearchRepairArgs args;
   std::string workerStr;
-  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1) {}
+  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1), args({0,0,0,0,0,0,false}) {}
 
  private:
   template <class Archive>

@@ -76,8 +76,7 @@ void WorkerConnection::handle_read(boost::system::error_code const& err,
     if (!JobMessage::serializeMsg(JobMessage::READ, msg_, data)) {
       logger_->warn(utl::DST,
                     41,
-                    "Received malformed msg {} from port {}",
-                    data,
+                    "Received malformed msg from port {}",
                     sock_.remote_endpoint().port());
       asio::write(sock_, asio::buffer("0"), error);
       sock_.close();

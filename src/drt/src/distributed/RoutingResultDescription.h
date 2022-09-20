@@ -41,7 +41,7 @@ namespace fr {
 class RoutingResultDescription : public dst::JobDescription
 {
  public:
-  RoutingResultDescription() : reply_port_(0) {}
+  RoutingResultDescription() : result_(), reply_port_(0) {}
   void setResult(const WorkerResult& result) { result_ = result; }
   void setReplyPort(ushort value) { reply_port_ = value; }
   void setReplyHost(const std::string& value) { reply_host_ = value; }
