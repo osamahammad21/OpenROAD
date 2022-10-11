@@ -155,7 +155,11 @@ Rect dbGuide::getBox() const
 }
 
 // User Code Begin dbGuidePublicMethods
-
+void dbGuide::setBox(Rect box)
+{
+  _dbGuide* obj = (_dbGuide*) this;
+  obj->box_ = box;
+}
 dbTechLayer* dbGuide::getLayer() const
 {
   _dbGuide* obj = (_dbGuide*) this;

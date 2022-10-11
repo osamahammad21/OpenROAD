@@ -1314,6 +1314,87 @@ uint dbInst::getPinAccessIdx() const
   return inst->pin_access_idx_;
 }
 
+dbInst* dbInst::duplicate(dbInst* original,
+                       const char* new_name,
+                       int x,
+                       int y)
+{
+  _dbInst* _original = (_dbInst*) original;
+  _dbBlock* block = (_dbBlock*) _original->getOwner();
+  auto master_ = original->getMaster();
+  _dbMaster* master = (_dbMaster*) master_;
+  _dbInstHdr* inst_hdr = block->_inst_hdr_hash.find(master->_id);
+  if (inst_hdr == NULL) {
+    inst_hdr
+        = (_dbInstHdr*) dbInstHdr::create((dbBlock*) block, (dbMaster*) master);
+    ZASSERT(inst_hdr);
+  }
+  if (block->_journal) {
+    debugPrint(block->getImpl()->getLogger(),
+               utl::ODB,
+               "DB_ECO",
+               1,
+               "ECO: dbInst:create");
+    dbLib* lib = master_->getLib();
+    block->_journal->beginAction(dbJournal::CREATE_OBJECT);
+    block->_journal->pushParam(dbInstObj);
+    block->_journal->pushParam(lib->getId());
+    block->_journal->pushParam(master_->getId());
+    block->_journal->pushParam(new_name);
+    block->_journal->endAction();
+  }
+
+  _dbInst* inst = block->_inst_tbl->create();
+  inst->_name = strdup(new_name);
+  ZALLOCATED(inst->_name);
+  inst->_inst_hdr = inst_hdr->getOID();
+  block->_inst_hash.insert(inst);
+  inst_hdr->_inst_cnt++;
+
+  // create the iterms
+  uint mterm_cnt = inst_hdr->_mterms.size();
+  inst->_iterms.resize(mterm_cnt);
+
+  uint i;
+  for (i = 0; i < mterm_cnt; ++i) {
+    _dbITerm* iterm = block->_iterm_tbl->create();
+    inst->_iterms[i] = iterm->getOID();
+    iterm->_flags._mterm_idx = i;
+    iterm->_inst = inst->getOID();
+  }
+
+  _dbBox* box = block->_box_tbl->create();
+  box->_shape._rect.init(0, 0, master->_width, master->_height);
+  box->_flags._owner_type = dbBoxOwner::INST;
+  box->_owner = inst->getOID();
+  inst->_bbox = box->getOID();
+
+  block->add_rect(box->_shape._rect);
+
+  
+  std::list<dbBlockCallBackObj*>::iterator cbitr;
+  for (cbitr = block->_callbacks.begin(); cbitr != block->_callbacks.end();
+        ++cbitr)
+    (**cbitr)().inDbInstCreate(
+        (dbInst*) inst);  // client ECO initialization - payam
+  for (i = 0; i < mterm_cnt; ++i) {
+    _dbITerm* iterm = block->_iterm_tbl->getPtr(inst->_iterms[i]);
+    std::list<dbBlockCallBackObj*>::iterator cbitr;
+    for (cbitr = block->_callbacks.begin(); cbitr != block->_callbacks.end();
+         ++cbitr)
+      (**cbitr)().inDbITermCreate(
+          (dbITerm*) iterm);  // client ECO initialization - payam
+  }
+
+  //Coying part
+  ((dbInst*) inst)->setOrient(original->getOrient());
+  inst->_x = _original->_x + x;
+  inst->_y = _original->_y + y;
+  _dbInst::setInstBBox(inst);
+  inst->_flags = _original->_flags;
+  return (dbInst*) inst;
+}
+
 dbInst* dbInst::create(dbBlock* block_,
                        dbMaster* master_,
                        const char* name_,

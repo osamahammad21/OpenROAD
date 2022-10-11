@@ -3259,6 +3259,10 @@ class dbInst : public dbObject
                         dbRegion* region,
                         bool physical_only = false);
 
+  static dbInst* duplicate(dbInst* original,
+                       const char* new_name,
+                       int x,
+                       int y);
   ///
   /// Delete the instance from the block.
   ///
@@ -8875,6 +8879,7 @@ class dbGuide : public dbObject
   Rect getBox() const;
 
   // User Code Begin dbGuide
+  void setBox(Rect box);
 
   dbNet* getNet() const;
 
