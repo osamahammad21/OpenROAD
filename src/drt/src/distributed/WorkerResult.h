@@ -40,9 +40,11 @@ struct WorkerResult
   int id;
   int numOfViolations;
   int64_t runTime;
+  int heapOps;
+  int connections;
   SearchRepairArgs args;
   std::string workerStr;
-  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1), args({0,0,0,0,0,0,false}) {}
+  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1), heapOps(0), connections(0),args({0,0,0,0,0,0,false}) {}
 
  private:
   template <class Archive>
@@ -51,6 +53,8 @@ struct WorkerResult
     (ar) & id;
     (ar) & numOfViolations;
     (ar) & runTime;
+    (ar) & heapOps;
+    (ar) & connections;
     (ar) & args;
     (ar) & workerStr;
   }

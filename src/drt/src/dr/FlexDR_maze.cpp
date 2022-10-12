@@ -1621,6 +1621,7 @@ void FlexDRWorker::route_queue()
     auto& workerRegionQuery = getWorkerRegionQuery();
     workerRegionQuery.add(tmp.get());
     net->addRoute(std::move(tmp));
+    incConnections();
   }
 
   gcWorker_->end();
@@ -1823,6 +1824,7 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
           auto& workerRegionQuery = getWorkerRegionQuery();
           workerRegionQuery.add(tmp.get());
           net->addRoute(std::move(tmp));
+          incConnections();
         }
         if (getDRIter() >= beginDebugIter
             && !getGCWorker()->getMarkers().empty()) {
@@ -1870,6 +1872,7 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
         graphics_->endNet(net);
       }
     }
+    incHeapOps();
   }
 }
 
@@ -2444,6 +2447,7 @@ void FlexDRWorker::routeNet_postAstarWritePath(
         unique_ptr<drConnFig> tmp(std::move(currVia));
         workerRegionQuery.add(tmp.get());
         net->addRoute(std::move(tmp));
+        incConnections();
         if (gridGraph_.hasRouteShapeCostAdj(
                 startX, startY, currZ, frDirEnum::U)) {
           net->addMarker();
@@ -2515,6 +2519,7 @@ bool FlexDRWorker::addApPathSegs(const FlexMazeIdx& apIdx, drNet* net)
     drPs->setMazeIdx(startIdx, endIdx);
     getWorkerRegionQuery().add(drPs.get());
     net->addRoute(std::move(drPs));
+    incConnections();
   }
   return true;
 }
@@ -2632,6 +2637,7 @@ void FlexDRWorker::processPathSeg(frMIdx startX,
   unique_ptr<drConnFig> tmp(std::move(currPathSeg));
   getWorkerRegionQuery().add(tmp.get());
   net->addRoute(std::move(tmp));
+  incConnections();
 
   // quick drc cnt
   bool prevHasCost = false;
@@ -3352,6 +3358,7 @@ void FlexDRWorker::routeNet_postAstarAddPatchMetal_addPWire(
   auto& workerRegionQuery = getWorkerRegionQuery();
   workerRegionQuery.add(tmp.get());
   net->addRoute(std::move(tmp));
+  incConnections();
 }
 
 void FlexDRWorker::routeNet_postAstarAddPatchMetal(drNet* net,

@@ -363,7 +363,9 @@ class FlexDRWorker
         dist_port_(0),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        heap_ops_(0),
+        connections_(0)
   {
   }
   FlexDRWorker()
@@ -377,7 +379,9 @@ class FlexDRWorker
         gcWorker_(nullptr),
         dist_on_(false),
         isCongested_(false),
-        save_updates_(false)
+        save_updates_(false),
+        heap_ops_(0),
+        connections_(0)
   {
   }
   // setters
@@ -543,6 +547,10 @@ class FlexDRWorker
     resetBlocked,
     setBlocked
   };
+  void incHeapOps() { ++heap_ops_; }
+  void incConnections() { ++connections_; }
+  int getHeapOps() const { return heap_ops_; }
+  int getConnections() const { return connections_; }
 
  private:
   typedef struct
@@ -600,7 +608,8 @@ class FlexDRWorker
   bool dist_on_;
   bool isCongested_;
   bool save_updates_;
-
+  int heap_ops_;
+  int connections_;
   // init
   void init(const frDesign* design);
   void initNets(const frDesign* design);

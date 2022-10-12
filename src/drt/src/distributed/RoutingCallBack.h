@@ -226,6 +226,8 @@ class RoutingCallBack : public dst::JobCallBack
       else
         result.numOfViolations = worker->getBestNumMarkers();
       result.runTime = time_span.count();
+      result.heapOps = worker->getHeapOps();
+      result.connections = worker->getConnections();
       #pragma omp critical
       debugPrint(logger_,
                  utl::DRT,
@@ -236,7 +238,7 @@ class RoutingCallBack : public dst::JobCallBack
                  frTime::getHours(result.runTime),
                  frTime::getMinutes(result.runTime),
                  frTime::getSeconds(result.runTime));
-      std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
+      std::unique_ptr<RoutingResultDescription> resultDesc = std::make_unique<RoutingResultDescription>();
       resultDesc->setResult(result);
       dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
       resultMsg.setJobDescription(std::move(resultDesc));
@@ -340,9 +342,9 @@ class RoutingCallBack : public dst::JobCallBack
       sock.close();
     }
     keep_results_.clear();
-    StubbornRoutingJobDescription* desc
-      = static_cast<StubbornRoutingJobDescription*>(msg.getJobDescription());
-    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper, this, *desc));
+    MLJobDescription* desc
+      = static_cast<MLJobDescription*>(msg.getJobDescription());
+    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper2, this, *desc));
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override

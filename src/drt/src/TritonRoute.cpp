@@ -366,16 +366,16 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                     utl::DRT,
                     "autotuner",
                     1,
-                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {:02}:{:02}:{:02}",
+                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {} heap ops {} connections {}",
                     args.mazeEndIter,
                     args.workerDRCCost,
                     args.workerMarkerCost,
                     args.ripupMode,
                     args.followGuide,
                     result.numOfViolations,
-                    frTime::getHours(result.runTime),
-                    frTime::getMinutes(result.runTime),
-                    frTime::getSeconds(result.runTime)
+                    result.runTime,
+                    result.heapOps,
+                    result.connections
                     );
         }
       }
