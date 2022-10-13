@@ -549,7 +549,7 @@ class FlexDRWorker
   };
   void incHeapOps() { ++heap_ops_; }
   void incConnections() { ++connections_; }
-  int getHeapOps() const { return heap_ops_; }
+  long long getHeapOps() const { return heap_ops_; }
   int getConnections() const { return connections_; }
 
  private:
@@ -608,7 +608,7 @@ class FlexDRWorker
   bool dist_on_;
   bool isCongested_;
   bool save_updates_;
-  int heap_ops_;
+  long long heap_ops_;
   int connections_;
   // init
   void init(const frDesign* design);

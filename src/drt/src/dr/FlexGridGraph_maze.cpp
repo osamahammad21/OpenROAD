@@ -153,6 +153,7 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
          << yCoords_[nextWavefrontGrid.y()] << " cost "
          << nextWavefrontGrid.getCost() << " g "
          << nextWavefrontGrid.getPathCost() << "\n";
+  drWorker_->incHeapOps();
   return;
 }
 
@@ -890,6 +891,7 @@ bool FlexGridGraph::search(vector<FlexMazeIdx>& connComps,
         currGrid.setSrcTaperBox(it->second);
     }
     wavefront_.push(currGrid);
+    drWorker_->incHeapOps();
   }
   while (!wavefront_.empty()) {
     if(TIMEOUT_REACHED)

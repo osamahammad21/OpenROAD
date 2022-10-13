@@ -40,7 +40,7 @@ struct WorkerResult
   int id;
   int numOfViolations;
   int64_t runTime;
-  int heapOps;
+  long long heapOps;
   int connections;
   SearchRepairArgs args;
   std::string workerStr;

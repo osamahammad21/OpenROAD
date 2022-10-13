@@ -1872,7 +1872,6 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
         graphics_->endNet(net);
       }
     }
-    incHeapOps();
   }
 }
 
