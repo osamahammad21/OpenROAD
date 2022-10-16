@@ -113,6 +113,7 @@ extern int CONGCOST;
 
 // DR
 extern bool TIMEOUT_REACHED;
+extern long long MAX_OPS;
 
 #define DIRBITSIZE 3
 #define WAVEFRONTBUFFERSIZE 2

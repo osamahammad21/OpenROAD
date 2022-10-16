@@ -46,6 +46,7 @@
 #include "distributed/StubbornRoutingJobDescription.h"
 #include "distributed/RoutingResultDescription.h"
 #include "distributed/MLJobDescription.h"
+#include "distributed/TimeOutDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR_conn.h"
 #include "dr/FlexDR_graphics.h"
@@ -66,6 +67,7 @@ using utl::ThreadException;
 
 BOOST_CLASS_EXPORT(RoutingJobDescription)
 BOOST_CLASS_EXPORT(MLJobDescription)
+BOOST_CLASS_EXPORT(TimeOutDescription)
 BOOST_CLASS_EXPORT(SearchRepairArgs)
 BOOST_CLASS_EXPORT(StubbornRoutingJobDescription)
 BOOST_CLASS_EXPORT(RoutingResultDescription)

@@ -42,6 +42,7 @@
 #include "distributed/StubbornRoutingJobDescription.h"
 #include "distributed/RoutingResultDescription.h"
 #include "distributed/MLJobDescription.h"
+#include "distributed/TimeOutDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR.h"
 #include "dst/Distributed.h"
@@ -71,10 +72,11 @@ class RoutingCallBack : public dst::JobCallBack
 
   void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override
   {
-    TIMEOUT_REACHED = true;
+    TimeOutDescription* desc = static_cast<TimeOutDescription*>(msg.getJobDescription());
+    MAX_OPS = desc->getMaxOps();
     while(busy_)
       sleep(1);
-    TIMEOUT_REACHED = false;
+    MAX_OPS = -1;
     dst::JobMessage result(dst::JobMessage::SUCCESS);
     dist_->sendResult(result, sock);
     sock.close();
@@ -91,24 +93,15 @@ class RoutingCallBack : public dst::JobCallBack
     auto requestedResult = desc->getResult();
     if(keep_results_.find(requestedResult.id) != keep_results_.end())
     {
-      for(auto& keep_result : keep_results_[requestedResult.id])
+      auto keep_result = keep_results_[requestedResult.id];
+      if(keep_result.args == requestedResult.args)
       {
-        bool valid = keep_result->getMazeEndIter() == requestedResult.args.mazeEndIter;
-        valid &= keep_result->getMarkerCost() == requestedResult.args.workerMarkerCost;
-        valid &= keep_result->getDrcCost() == requestedResult.args.workerDRCCost;
-        valid &= keep_result->isFollowGuide() == requestedResult.args.followGuide;
-        if(valid)
-        {
-          dst::JobMessage result(dst::JobMessage::ROUTING_STUBBORN_RESULT), dummy;
-          auto resultDesc = std::make_unique<RoutingResultDescription>();
-          WorkerResult workerResult;
-          workerResult.workerStr = keep_result->getSerializedWorker();
-          workerResult.id = requestedResult.id;
-          resultDesc->setResult(workerResult);
-          result.setJobDescription(std::move(resultDesc));
-          dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
-          return;
-        }
+        dst::JobMessage result(dst::JobMessage::ROUTING_STUBBORN_RESULT), dummy;
+        auto resultDesc = std::make_unique<RoutingResultDescription>();
+        resultDesc->setResult(keep_result);
+        result.setJobDescription(std::move(resultDesc));
+        dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), dummy);
+        return;
       }
     }
   }
@@ -194,19 +187,6 @@ class RoutingCallBack : public dst::JobCallBack
     #pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < strategies.size(); i++) {
       auto args = strategies.at(i);
-      if(TIMEOUT_REACHED)
-      {
-        WorkerResult result;
-        result.id = args.offset;
-        result.numOfViolations = -1;
-        std::unique_ptr<MLJobDescription> resultDesc = std::make_unique<MLJobDescription>();
-        resultDesc->setResult(result);
-        dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
-        resultMsg.setJobDescription(std::move(resultDesc));
-        dst::JobMessage dummy;
-        dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
-        continue;
-      }
       auto worker = FlexDRWorker::load(workerStr, logger_, router_->getDesign(), nullptr); 
       worker->setMazeEndIter(args.mazeEndIter);
       worker->setMarkerCost(args.workerMarkerCost);
@@ -221,13 +201,12 @@ class RoutingCallBack : public dst::JobCallBack
       seconds time_span = duration_cast<seconds>(t1 - t0);
       WorkerResult result;
       result.id = args.offset;
-      if(TIMEOUT_REACHED)
+      if(MAX_OPS != -1 && worker->getHeapOps() > MAX_OPS)
         result.numOfViolations = -1;
       else
         result.numOfViolations = worker->getBestNumMarkers();
       result.runTime = time_span.count();
       result.heapOps = worker->getHeapOps();
-      result.connections = worker->getConnections();
       #pragma omp critical
       debugPrint(logger_,
                  utl::DRT,
@@ -245,34 +224,17 @@ class RoutingCallBack : public dst::JobCallBack
       dst::JobMessage dummy;
       dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
     }
-    if(TIMEOUT_REACHED)
-      logger_->report("########TIMEOUT########");
-    else
-      logger_->report("########Done########");
+    logger_->report("########Done########");
     busy_ = false;
   }
   void handleStubbornTilesJobHelper(StubbornRoutingJobDescription desc)
   {
     omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
     #pragma omp parallel for schedule(dynamic)
-    for (int i = 0; i < desc.getWorkers().size(); i++) {\
+    for (int i = 0; i < desc.getWorkers().size(); i++) {
       auto idx = std::get<0>(desc.getWorkers().at(i));
       auto workerStr = std::get<1>(desc.getWorkers().at(i));
       auto args = std::get<2>(desc.getWorkers().at(i));
-      if(TIMEOUT_REACHED)
-      {
-        WorkerResult result;
-        result.id = idx;
-        result.numOfViolations = -1;
-        result.args = args;
-        std::unique_ptr<RoutingResultDescription> resultDesc = std::make_unique<RoutingResultDescription>();
-        resultDesc->setResult(result);
-        dst::JobMessage resultMsg(dst::JobMessage::ROUTING_STUBBORN_RESULT);
-        resultMsg.setJobDescription(std::move(resultDesc));
-        dst::JobMessage dummy;
-        dist_->sendJob(resultMsg, desc.getReplyHost().c_str(), desc.getReplyPort(), dummy);
-        continue;
-      }
       auto worker = FlexDRWorker::load(workerStr, logger_, router_->getDesign(), nullptr); 
       worker->setMazeEndIter(args.mazeEndIter);
       worker->setMarkerCost(args.workerMarkerCost);
@@ -287,11 +249,12 @@ class RoutingCallBack : public dst::JobCallBack
       seconds time_span = duration_cast<seconds>(t1 - t0);
       WorkerResult result;
       result.id = idx;
-      if(TIMEOUT_REACHED)
+      if(MAX_OPS != -1 && worker->getHeapOps() > MAX_OPS)
         result.numOfViolations = -1;
       else
         result.numOfViolations = worker->getBestNumMarkers();
       result.runTime = time_span.count();
+      result.heapOps = worker->getHeapOps();
       result.args = args;
       #pragma omp critical
       debugPrint(logger_,
@@ -312,26 +275,15 @@ class RoutingCallBack : public dst::JobCallBack
       #pragma omp critical
       if(result.numOfViolations != -1)
       {
-        if(keep_results_.find(idx) == keep_results_.end())
+        if(keep_results_.find(idx) == keep_results_.end() ||
+            result < keep_results_[idx])
         {
-          keep_results_[idx].push_back(std::move(worker));
-        } else
-        {
-          if(keep_results_[idx][0]->getBestNumMarkers() > result.numOfViolations)
-          {
-            keep_results_[idx].clear();
-            keep_results_[idx].push_back(std::move(worker));
-          } else if(keep_results_[idx][0]->getBestNumMarkers() == result.numOfViolations)
-          {
-            keep_results_[idx].push_back(std::move(worker));
-          }
+          result.workerStr = worker->getSerializedWorker();
+          keep_results_[idx]  = result;
         }
       }
     }
-    if(TIMEOUT_REACHED)
-      logger_->report("########TIMEOUT########");
-    else
-      logger_->report("########Done########");
+    logger_->report("########Done########");
     busy_ = false;
   }
   void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
@@ -342,9 +294,9 @@ class RoutingCallBack : public dst::JobCallBack
       sock.close();
     }
     keep_results_.clear();
-    MLJobDescription* desc
-      = static_cast<MLJobDescription*>(msg.getJobDescription());
-    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper2, this, *desc));
+    StubbornRoutingJobDescription* desc
+      = static_cast<StubbornRoutingJobDescription*>(msg.getJobDescription());
+    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper, this, *desc));
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override
@@ -413,7 +365,7 @@ class RoutingCallBack : public dst::JobCallBack
   bool init_;
   FlexDRViaData via_data_;
   asio::thread_pool routing_pool_;
-  std::map<int, std::vector<std::unique_ptr<FlexDRWorker>>> keep_results_;
+  std::map<int, WorkerResult> keep_results_;
   bool busy_;
 };
 

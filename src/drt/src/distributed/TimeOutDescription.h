@@ -1,6 +1,6 @@
 /* Authors: Osama */
 /*
- * Copyright (c) 2022, The Regents of the University of California
+ * Copyright (c) 2021, The Regents of the University of California
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,45 +27,27 @@
  */
 
 #pragma once
-#include "dr/FlexDR.h"
-
+#include <boost/serialization/base_object.hpp>
+#include "dst/JobMessage.h"
 namespace boost::serialization {
 class access;
 }
 namespace fr {
 
-struct WorkerResult
+class TimeOutDescription : public dst::JobDescription
 {
  public:
-  int id;
-  int numOfViolations;
-  int64_t runTime;
-  long long heapOps;
-  SearchRepairArgs args;
-  std::string workerStr;
-  WorkerResult() : id(-1), numOfViolations(-1), runTime(-1), heapOps(0),args({0,0,0,0,0,0,false}) {}
-  bool operator <(const WorkerResult& rhs)
-  {
-    if (numOfViolations != rhs.numOfViolations)
-      return numOfViolations < rhs.numOfViolations;
-    if (runTime != rhs.runTime)
-      return runTime < rhs.runTime;
-    if (heapOps != rhs.heapOps)
-      return heapOps < rhs.heapOps;
-    if (args != rhs.args)
-      return args < rhs.args;
-    return false;
-  }
+  TimeOutDescription() : max_ops_(-1) {}
+  void setMaxOps(long long value) { max_ops_ = value; }
+  long long getMaxOps() const { return max_ops_; }
+
  private:
+  long long max_ops_;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
-    (ar) & id;
-    (ar) & numOfViolations;
-    (ar) & runTime;
-    (ar) & heapOps;
-    (ar) & args;
-    (ar) & workerStr;
+    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
+    (ar) & max_ops_;
   }
   friend class boost::serialization::access;
 };

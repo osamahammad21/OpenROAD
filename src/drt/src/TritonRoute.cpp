@@ -60,6 +60,7 @@
 #include "distributed/MLJobDescription.h"
 #include "distributed/WorkerResult.h"
 #include "dst/BroadcastJobDescription.h"
+#include "distributed/TimeOutDescription.h"
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
@@ -350,6 +351,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
     asio::thread_pool listenPool(1);
     asio::post(listenPool, [this, size, strategies](){
       int remaining = size;
+      bool init = true;
       while(remaining)
       {
         std::vector<WorkerResult> results;
@@ -359,6 +361,16 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
           continue;
         }
         remaining -= results.size();
+        if(init)
+        {
+          init = false;
+          auto ops = results[0].heapOps;
+          auto desc = std::make_unique<TimeOutDescription>();
+          desc->setMaxOps(ops);
+          dst::JobMessage msg(dst::JobMessage::TIMEOUT), resMsg;
+          msg.setJobDescription(std::move(desc));
+          dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, resMsg);
+        }
         for(auto result : results)
         {
           auto args = strategies[result.id];
@@ -366,7 +378,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                     utl::DRT,
                     "autotuner",
                     1,
-                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {} heap ops {} connections {}",
+                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {} heap ops {}",
                     args.mazeEndIter,
                     args.workerDRCCost,
                     args.workerMarkerCost,
@@ -374,8 +386,7 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                     args.followGuide,
                     result.numOfViolations,
                     result.runTime,
-                    result.heapOps,
-                    result.connections
+                    result.heapOps
                     );
         }
       }

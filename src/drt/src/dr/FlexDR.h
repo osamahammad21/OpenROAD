@@ -118,6 +118,10 @@ struct SearchRepairArgs
             ripupMode==rhs.ripupMode &&
             followGuide==rhs.followGuide;
   }
+  bool operator!=(const SearchRepairArgs& rhs)
+  {
+    return !(operator==(rhs));
+  }
   bool operator<(const SearchRepairArgs& rhs) const
   {
     if(size != rhs.size)

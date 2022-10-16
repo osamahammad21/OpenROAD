@@ -117,6 +117,7 @@ int CONGCOST = 8;
 int HISTCOST = 32;
 
 bool TIMEOUT_REACHED = false;
+long long MAX_OPS = -1;
 
 namespace fr {
 

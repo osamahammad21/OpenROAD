@@ -1596,7 +1596,7 @@ void FlexDRWorker::route_queue()
 
   // route
   route_queue_main(rerouteQueue);
-  if(TIMEOUT_REACHED)
+  if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
     return;
   // end
   gcWorker_->resetTargetNet();
@@ -1771,7 +1771,7 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
       // route
       mazeNetInit(net);
       bool isRouted = routeNet(net);
-      if(TIMEOUT_REACHED)
+      if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
         return;
       if (isRouted == false) {
         if (OUT_MAZE_FILE == string("")) {
@@ -2909,7 +2909,7 @@ bool FlexDRWorker::routeNet(drNet* net)
   bool isFirstConn = true;
   bool searchSuccess = true;
   while (!unConnPins.empty()) {
-    if(TIMEOUT_REACHED)
+    if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
     {
       searchSuccess = false;
       break;
@@ -2934,7 +2934,7 @@ bool FlexDRWorker::routeNet(drNet* net)
       isFirstConn = false;
     } else {
       searchSuccess = false;
-      if(TIMEOUT_REACHED)
+      if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
         break;
       logger_->report("Failed to find a path between pin " + nextPin->getName()
                       + " and source aps:");
