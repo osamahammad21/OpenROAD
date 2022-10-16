@@ -1934,10 +1934,15 @@ void FlexDR::distributeStubbornTiles(
   }
   //Run Workers Locally
   high_resolution_clock::time_point t0 = high_resolution_clock::now();
+  long long max_ops = 0;
   #pragma omp parallel for schedule(dynamic)
   for(int i = 0; i < routableWorkers.size(); i++)
   {
     routableWorkers[i].second->reloadedMain();
+    #pragma omp critical
+    {
+      max_ops = std::max(max_ops, routableWorkers[i].second->getHeapOps());
+    }
   }
   high_resolution_clock::time_point t1 = high_resolution_clock::now();
   seconds time_span = duration_cast<seconds>(t1 - t0);
@@ -1946,11 +1951,14 @@ void FlexDR::distributeStubbornTiles(
   {
     if(router_->getWorkerResultsSize() != totSz)
       sleep((int) (0.1 * time_span.count()));
+    auto desc = std::make_unique<TimeOutDescription>();
+    desc->setMaxOps(max_ops);
     dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+    msg.setJobDescription(std::move(desc));
     dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   }
   //Wait For Results
-  std::map<int, std::pair<SearchRepairArgs, int>> resultMap;
+  std::map<int, WorkerResult> resultMap;
   while(totSz)
   {
     std::vector<WorkerResult> results;
@@ -1962,18 +1970,17 @@ void FlexDR::distributeStubbornTiles(
     totSz -= results.size();
     for(auto result : results)
     {
-      if (result.numOfViolations == -1)
-        continue;
-      if (resultMap.find(result.id) == resultMap.end())
-        resultMap[result.id] = {SearchRepairArgs(), INT_MAX};
-      if (result.numOfViolations < resultMap[result.id].second)
-        resultMap[result.id] = {result.args, result.numOfViolations}; 
+      if (resultMap.find(result.id) == resultMap.end() ||
+          result < resultMap[result.id])
+      {
+        resultMap[result.id] = result;
+      }
     }
   }
   //Choose Best Result
   for(auto& [idx, worker] : routableWorkers)
   {
-    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].second >= worker->getBestNumMarkers())
+    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].numOfViolations >= worker->getBestNumMarkers())
     {
       resultMap.erase(idx);
     }
@@ -1981,15 +1988,12 @@ void FlexDR::distributeStubbornTiles(
   //Fetch Best Results
   for(auto& [idx, bestResult] : resultMap)
   {
-    debugPrint(logger_, utl::DRT, "distributed", 1, "Found remote result with {} markers better than {}", bestResult.second, workersInBatch.at(idx)->getBestNumMarkers());
+    debugPrint(logger_, utl::DRT, "distributed", 1, "Found remote result with {} markers better than {}", bestResult.numOfViolations, workersInBatch.at(idx)->getBestNumMarkers());
     dst::JobMessage msg(dst::JobMessage::FETCH_ROUTING_RESULT, dst::JobMessage::BROADCAST), dummy;
     auto desc = std::make_unique<RoutingResultDescription>();
     desc->setReplyPort(router_->local_port_);
     desc->setReplyHost(router_->local_ip_);
-    WorkerResult result;
-    result.id = idx;
-    result.args = bestResult.first;
-    desc->setResult(result);
+    desc->setResult(bestResult);
     msg.setJobDescription(std::move(desc));
     dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, dummy);
   }
