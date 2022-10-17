@@ -108,6 +108,7 @@ struct SearchRepairArgs
   frUInt4 workerMarkerCost;
   int ripupMode;
   bool followGuide;
+  frUInt4 fixedShapeCost;
   bool operator==(const SearchRepairArgs& rhs)
   {
     return size==rhs.size &&
@@ -148,6 +149,7 @@ struct SearchRepairArgs
     (ar) & workerDRCCost; 
     (ar) & workerMarkerCost; 
     (ar) & ripupMode; 
+    (ar) & fixedShapeCost; 
   }
   friend class boost::serialization::access;
 };
@@ -170,6 +172,7 @@ class FlexDR
   void init();
   int main();
   void searchRepair(const SearchRepairArgs& args);
+  void searchRepairExp();
   void end(bool done = false);
 
   const FlexDRViaData* getViaData() const { return &via_data_; }

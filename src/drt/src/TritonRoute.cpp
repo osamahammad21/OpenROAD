@@ -1015,12 +1015,13 @@ void TritonRoute::pinAccess(std::vector<odb::dbInst*> target_insts)
   writer.updateDb(db_, true);
 }
 
-void TritonRoute::checkDRC(const char* filename, int x1, int y1, int x2, int y2)
+int TritonRoute::checkDRC(const char* filename, int x1, int y1, int x2, int y2)
 {
   initDesign();
   Rect box(x1, y1, x2, y2);
   if (box.area() == 0) {
     box = design_->getTopBlock()->getBBox();
+    box.bloat(500, box);
   }
   auto gcWorker = std::make_unique<FlexGCWorker>(design_->getTech(), logger_);
   gcWorker->setDrcBox(box);
@@ -1032,7 +1033,9 @@ void TritonRoute::checkDRC(const char* filename, int x1, int y1, int x2, int y2)
   frList<std::unique_ptr<frMarker>> markers;
   for (auto& marker : gcWorker->getMarkers())
     markers.push_back(std::make_unique<frMarker>(*marker));
-  reportDRC(filename, markers, box);
+  if(strlen(filename) != 0)
+    reportDRC(filename, markers, box);
+  return markers.size();
 }
 
 void TritonRoute::readParams(const string& fileName)

@@ -177,7 +177,7 @@ class TritonRoute
   void reportDRC(const std::string& file_name,
                  const std::list<std::unique_ptr<fr::frMarker>>& markers,
                  odb::Rect bbox = odb::Rect(0, 0, 0, 0));
-  void checkDRC(const char* drc_file, int x0, int y0, int x1, int y1);
+  int checkDRC(const char* drc_file, int x0, int y0, int x1, int y1);
   void test();
   void sendSingleWorkerEnv(const std::vector<fr::SearchRepairArgs>& strategies, int begin, int size);
 

@@ -42,6 +42,7 @@
 #include <sstream>
 
 #include "db/infra/frTime.h"
+#include "distributed/RoutingIterationDescription.h"
 #include "distributed/RoutingJobDescription.h"
 #include "distributed/StubbornRoutingJobDescription.h"
 #include "distributed/RoutingResultDescription.h"
@@ -65,6 +66,7 @@ using namespace std::chrono;
 
 using utl::ThreadException;
 
+BOOST_CLASS_EXPORT(RoutingIterationDescription)
 BOOST_CLASS_EXPORT(RoutingJobDescription)
 BOOST_CLASS_EXPORT(MLJobDescription)
 BOOST_CLASS_EXPORT(TimeOutDescription)
@@ -2360,7 +2362,47 @@ void FlexDR::reportGuideCoverage()
   }
   file.close();
 }
-
+void FlexDR::searchRepairExp()
+{
+  // create strategies for iteration 0
+  auto args = strategy()[0];
+  std::vector<SearchRepairArgs> strategies;
+  for (auto clipSize : {7, 9, 11})
+    for (auto fixedShapeCost : {ROUTESHAPECOST, 2 * ROUTESHAPECOST, 3 * ROUTESHAPECOST})
+      for (auto drcCost : { ROUTESHAPECOST, 2 * ROUTESHAPECOST, 3 * ROUTESHAPECOST})
+      {
+        args.size = clipSize;
+        args.fixedShapeCost = fixedShapeCost;
+        args.workerDRCCost = drcCost;
+        strategies.push_back(args);
+      }
+  // send globals to remote workers
+  globals_path_ = fmt::format("{}globals.{}.ar", dist_dir_, 0);
+  router_->writeGlobals(globals_path_.c_str());
+  std::string serializedViaData;
+  serializeViaData(via_data_, serializedViaData);
+  router_->sendGlobalsUpdates(globals_path_, serializedViaData);
+  //Send work
+  router_->dist_pool_.join();
+  #pragma omp parallel for schedule(dynamic)
+  for(int i = 0; i < strategies.size(); i++)
+  {
+    dst::JobMessage msg(dst::JobMessage::ROUTING_INITIAL), result;
+    auto desc = std::make_unique<RoutingIterationDescription>();
+    desc->args = strategies[i];
+    msg.setJobDescription(std::move(desc));
+    bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+    if(ok) {
+      auto resDesc = static_cast<RoutingIterationDescription*>(result.getJobDescription());
+      debugPrint(logger_, utl::DRT, "distributed", 1 , "{}_{}_{} non-recheck violations {} recheck violations {} true violations {} elapsedTime {:02}:{:02}:{:02}", 
+                    resDesc->args.size, resDesc->args.fixedShapeCost, resDesc->args.workerDRCCost, resDesc->violations, resDesc->recheck, resDesc->trueViols,
+                    frTime::getHours(resDesc->elapsedTime),
+                    frTime::getMinutes(resDesc->elapsedTime),
+                    frTime::getSeconds(resDesc->elapsedTime));
+    }
+  }
+  exit(0);
+}
 int FlexDR::main()
 {
   ProfileTask profile("DR:main");
@@ -2400,7 +2442,7 @@ int FlexDR::main()
       clipSize += min(MAX_CLIPSIZE_INCREASE, (int) round(clipSizeInc_));
     }
     args.size = clipSize;
-
+    searchRepairExp();
     searchRepair(args);
     if (getDesign()->getTopBlock()->getNumMarkers() == 0) {
       break;

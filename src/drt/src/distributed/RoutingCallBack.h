@@ -38,6 +38,7 @@
 #include <mutex>
 
 #include "db/infra/frTime.h"
+#include "distributed/RoutingIterationDescription.h"
 #include "distributed/RoutingJobDescription.h"
 #include "distributed/StubbornRoutingJobDescription.h"
 #include "distributed/RoutingResultDescription.h"
@@ -109,12 +110,37 @@ class RoutingCallBack : public dst::JobCallBack
   void onRoutingJobReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
     busy_ = true;
-    if (msg.getJobType() == dst::JobMessage::ROUTING_INITIAL)
-      handleInitialRoutingJob(msg, sock);
-    else if (msg.getJobType() == dst::JobMessage::ROUTING_STUBBORN)
-      handleStubbornTilesJob(msg, sock);
+    handleRoutingIterationJob(msg, sock);
+    // if (msg.getJobType() == dst::JobMessage::ROUTING_INITIAL)
+    //   handleInitialRoutingJob(msg, sock);
+    // else if (msg.getJobType() == dst::JobMessage::ROUTING_STUBBORN)
+    //   handleStubbornTilesJob(msg, sock);
   }
+  void handleRoutingIterationJob(dst::JobMessage& msg, dst::socket& sock)
+  {
+    RoutingIterationDescription* desc = static_cast<RoutingIterationDescription*>(msg.getJobDescription());
+    FIXEDSHAPECOST = desc->args.fixedShapeCost;
+    high_resolution_clock::time_point t0 = high_resolution_clock::now();
+    FlexDR dr = FlexDR(router_, router_->getDesign(), logger_, nullptr);
+    dr.init();
+    dr.searchRepair(desc->args);
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+    seconds time_span = duration_cast<seconds>(t1 - t0);
+    int recheckViols = 0;
+    for(const auto& marker : router_->getDesign()->getTopBlock()->getMarkers())
+    {
+      if(marker->getConstraint()->typeId() == frConstraintTypeEnum::frcRecheckConstraint)
+        recheckViols++;
+    }
+    desc->violations = router_->getDesign()->getTopBlock()->getNumMarkers() - recheckViols;
+    desc->recheck = recheckViols;
+    desc->trueViols = router_->checkDRC("", 0,0,0,0);
+    desc->elapsedTime = time_span.count();
+    dst::JobMessage result(dst::JobMessage::NONE);
+    result.setJobDescription(std::make_unique<RoutingIterationDescription>(*desc));
+    dist_->sendResult(result, sock);
 
+  }
   void onRoutingResultReceived(dst::JobMessage& msg, dst::socket& sock) override
   {
     RoutingResultDescription* desc = static_cast<RoutingResultDescription*>(msg.getJobDescription());
