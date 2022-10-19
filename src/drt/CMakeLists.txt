@@ -47,15 +47,17 @@ check_ipo_supported(RESULT ipo_supported OUTPUT error)
 find_package(Boost REQUIRED COMPONENTS serialization system)
 find_package(OpenMP REQUIRED)
 find_package(VTune)
-find_package(libmongocxx REQUIRED)
-find_package(libbsoncxx REQUIRED)
-include_directories(${LIBMONGOCXX_INCLUDE_DIR})
-include_directories(${LIBBSONCXX_INCLUDE_DIR})
-include_directories("/usr/local/include/mongocxx/v_noabi")
-include_directories("/usr/local/include/bsoncxx/v_noabi")
-include_directories("/usr/local/include/libmongoc-1.0")
-include_directories("/usr/local/include/libbson-1.0")
-include_directories("/usr/local/lib")
+if (MONGODB)
+  find_package(libmongocxx REQUIRED)
+  find_package(libbsoncxx REQUIRED)
+  include_directories(${LIBMONGOCXX_INCLUDE_DIR})
+  include_directories(${LIBBSONCXX_INCLUDE_DIR})
+  include_directories("/usr/local/include/mongocxx/v_noabi")
+  include_directories("/usr/local/include/bsoncxx/v_noabi")
+  include_directories("/usr/local/include/libmongoc-1.0")
+  include_directories("/usr/local/include/libbson-1.0")
+  include_directories("/usr/local/lib")
+endif()
 
 swig_lib(NAME      drt
          NAMESPACE drt
@@ -159,10 +161,14 @@ target_link_libraries(drt
     OpenMP::OpenMP_CXX
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
-    ${LIBMONGOCXX_LIBRARIES}
-    ${LIBBSONCXX_LIBRARIES}
 )
-
+if (MONGODB)
+  target_link_libraries(drt
+    PUBLIC
+      ${LIBMONGOCXX_LIBRARIES}
+      ${LIBBSONCXX_LIBRARIES}
+  )
+endif()
 messages(
   TARGET drt
 )
