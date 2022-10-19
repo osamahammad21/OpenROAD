@@ -61,6 +61,7 @@
 #include "distributed/WorkerResult.h"
 #include "dst/BroadcastJobDescription.h"
 #include "distributed/TimeOutDescription.h"
+#ifdef MONGODB
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
 #include <mongocxx/stdx.hpp>
@@ -76,11 +77,12 @@ using bsoncxx::builder::stream::document;
 using bsoncxx::builder::stream::finalize;
 using bsoncxx::builder::stream::open_array;
 using bsoncxx::builder::stream::open_document;
+mongocxx::instance instance{};
+#endif
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
 using namespace triton_route;
-mongocxx::instance instance{};
 namespace sta {
 // Tcl files encoded into strings.
 extern const char* drt_tcl_inits[];
@@ -350,7 +352,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
     MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
     omp_set_num_threads(MAX_THREADS);
     std::vector<SearchRepairArgs> strategies;
-    for(auto mazeEndIter : {3, 8 ,16})
+    for(auto mazeEndIter : {3, 8 ,16, 32, 64})
     {
       for(auto markerCost : {2, 4, 8, 16, 32, 64})
       {
@@ -374,8 +376,10 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
                             std::ios::binary);
     std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
                           std::istreambuf_iterator<char>());
+    #ifdef MONGODB
     mongocxx::client client{mongocxx::uri{}};
     mongocxx::database mongodb = client["DRT"];
+    #endif
     std::string workerId;
     workerFile.close();
     {
@@ -391,6 +395,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
         if (marker.getConstraint())
           markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
       }
+      #ifdef MONGODB
       // update mongo db
       mongocxx::collection coll = mongodb["workers"];
       auto builder = document{};
@@ -429,12 +434,17 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
         workerId = result.value().inserted_id().get_oid().value.to_string();
       }
       logger_->report("Inserted/Acknowledge worker {} to mongodb", workerId);
+      #endif
     }
     logger_->report("Trying {} strategies", size);
     if (distributed_) {
       int batchSize = size / getCloudSize();
       asio::thread_pool listenPool(1);
-      asio::post(listenPool, [this, size, strategies, mongodb, workerId]() {
+      asio::post(listenPool, [this, size, strategies
+      #ifdef MONGODB
+      , mongodb
+      #endif
+      , workerId]() {
         int remaining = size;
         bool timeout = false;
         long long maxOps = 0;
@@ -473,6 +483,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
                 args.followGuide,
                 result.numOfViolations,
                 result.heapOps);
+            #ifdef MONGODB
             //update document mongodb
             mongocxx::collection coll = mongodb["workers"];
             document filter_builder, update_builder;
@@ -487,6 +498,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
                         <<  "mazeSearchOps" << (long) result.heapOps
                         << close_document << close_document;
             coll.update_one(filter_builder.view(), update_builder.view());
+            #endif
           }
         }
       });
@@ -547,6 +559,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
                     frTime::getMinutes(time_span.count()),
                     frTime::getSeconds(time_span.count()));
           //update document mongodb
+          #ifdef MONGODB
           mongocxx::collection coll = mongodb["workers"];
           document filter_builder, update_builder;
           filter_builder << "_id" << bsoncxx::oid(workerId) << finalize;
@@ -560,6 +573,7 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
                         <<  "mazeSearchOps" << (long) worker->getHeapOps()
                         << close_document << close_document << finalize;
           coll.update_one(filter_builder.view(), update_builder.view());
+          #endif
         }
         worker.reset();
       }

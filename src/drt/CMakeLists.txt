@@ -168,6 +168,10 @@ if (MONGODB)
       ${LIBMONGOCXX_LIBRARIES}
       ${LIBBSONCXX_LIBRARIES}
   )
+  target_compile_definitions(drt
+    PUBLIC
+    MONGODB=1
+  )
 endif()
 messages(
   TARGET drt
