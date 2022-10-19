@@ -294,9 +294,9 @@ class RoutingCallBack : public dst::JobCallBack
       sock.close();
     }
     keep_results_.clear();
-    StubbornRoutingJobDescription* desc
-      = static_cast<StubbornRoutingJobDescription*>(msg.getJobDescription());
-    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper, this, *desc));
+    MLJobDescription* desc
+      = static_cast<MLJobDescription*>(msg.getJobDescription());
+    asio::post(routing_pool_, boost::bind(&RoutingCallBack::handleStubbornTilesJobHelper2, this, *desc));
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override

@@ -5,7 +5,7 @@ set balancer [$OR balancer.tcl > results/balancer.log &]
 after 2000
 set_debug_level DRT autotuner 1
 detailed_route_debug -dr
-detailed_route_run_worker -dump_dir results/worker138600x_79800y/ \
+detailed_route_run_worker -dump_dir results/ \
                           -distributed \
                           -remote_host 127.0.0.1 \
                           -remote_port 1234 \

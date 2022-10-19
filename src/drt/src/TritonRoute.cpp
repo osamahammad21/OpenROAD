@@ -61,11 +61,26 @@
 #include "distributed/WorkerResult.h"
 #include "dst/BroadcastJobDescription.h"
 #include "distributed/TimeOutDescription.h"
+#include <bsoncxx/json.hpp>
+#include <mongocxx/client.hpp>
+#include <mongocxx/stdx.hpp>
+#include <mongocxx/uri.hpp>
+#include <mongocxx/instance.hpp>
+#include <bsoncxx/builder/stream/helpers.hpp>
+#include <bsoncxx/builder/stream/document.hpp>
+#include <bsoncxx/builder/stream/array.hpp>
+
+using bsoncxx::builder::stream::close_array;
+using bsoncxx::builder::stream::close_document;
+using bsoncxx::builder::stream::document;
+using bsoncxx::builder::stream::finalize;
+using bsoncxx::builder::stream::open_array;
+using bsoncxx::builder::stream::open_document;
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
 using namespace triton_route;
-
+mongocxx::instance instance{};
 namespace sta {
 // Tcl files encoded into strings.
 extern const char* drt_tcl_inits[];
@@ -234,12 +249,14 @@ void serializeWorkerTR(FlexDRWorker* worker, std::string& workerStr)
   workerStr = stream.str();
 }
 
-void TritonRoute::sendWorkers(const std::vector<std::unique_ptr<FlexDRWorker>>& uWorkers, int begin, int size)
+void TritonRoute::sendWorkers(
+    const std::vector<std::unique_ptr<FlexDRWorker>>& uWorkers,
+    int begin,
+    int size)
 {
   std::vector<std::pair<int, std::string>> workers;
   {
-    for (int i = begin; i < begin+size && i < uWorkers.size(); i++)
-    {
+    for (int i = begin; i < begin + size && i < uWorkers.size(); i++) {
       std::string workerStr;
       serializeWorkerTR(uWorkers.at(i).get(), workerStr);
       workers.push_back({i, workerStr});
@@ -266,8 +283,7 @@ void TritonRoute::sendWorkers(const std::vector<std::unique_ptr<FlexDRWorker>>& 
         result(dst::JobMessage::NONE);
     std::unique_ptr<MLJobDescription> desc
         = std::make_unique<MLJobDescription>();
-    MLJobDescription* rjd
-        = static_cast<MLJobDescription*>(desc.get());
+    MLJobDescription* rjd = static_cast<MLJobDescription*>(desc.get());
     rjd->setWorkers(workers);
     rjd->setReplyPort(local_port_);
     msg.setJobDescription(std::move(desc));
@@ -287,18 +303,25 @@ static inline void copyFile(const char* srcPath, const char* dstPath)
   dst.close();
 }
 
-void TritonRoute::sendSingleWorkerEnv(const std::vector<SearchRepairArgs>& strategies, int begin, int size)
+void TritonRoute::sendSingleWorkerEnv(
+    const std::vector<SearchRepairArgs>& strategies,
+    int begin,
+    int size)
 {
   std::unique_ptr<MLJobDescription> desc = std::make_unique<MLJobDescription>();
   desc->init_globals_path_ = fmt::format("{}init_globals.bin", shared_volume_);
   desc->odb_path_ = fmt::format("{}design.odb", shared_volume_);
   desc->updates_path_ = fmt::format("{}updates.bin", shared_volume_);
-  desc->worker_globals_path_ = fmt::format("{}worker_globals.bin", shared_volume_);
+  desc->worker_globals_path_
+      = fmt::format("{}worker_globals.bin", shared_volume_);
   desc->via_data_path_ = fmt::format("{}viadata.bin", shared_volume_);
   desc->worker_path_ = fmt::format("{}worker.bin", shared_volume_);
   desc->strategies_.resize(size);
-  std::copy(strategies.begin() + begin , strategies.begin() + begin + size, desc->strategies_.begin());
-  dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN), result(dst::JobMessage::NONE);
+  std::copy(strategies.begin() + begin,
+            strategies.begin() + begin + size,
+            desc->strategies_.begin());
+  dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN),
+      result(dst::JobMessage::NONE);
   desc->setReplyPort(local_port_);
   desc->setReplyHost(local_ip_);
   msg.setJobDescription(std::move(desc));
@@ -308,130 +331,212 @@ void TritonRoute::sendSingleWorkerEnv(const std::vector<SearchRepairArgs>& strat
   dist_->sendJob(msg, remote_ip.c_str(), remote_port, result);
 }
 
-void TritonRoute::debugSingleWorker(const std::string& dumpDir,
+void TritonRoute::debugSingleWorker(const std::string& parentDir,
                                     const std::string& drcRpt)
 {
-  updateGlobals(fmt::format("{}/init_globals.bin", dumpDir).c_str());
-  resetDb(fmt::format("{}/design.odb", dumpDir).c_str());
-  updateDesign(fmt::format("{}/updates.bin", dumpDir).c_str());
-  updateGlobals(fmt::format("{}/worker_globals.bin", dumpDir).c_str());
-  MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
-  omp_set_num_threads(MAX_THREADS);
-  std::vector<SearchRepairArgs> strategies;
-  if(distributed_)
+  if (distributed_)
     dist_->runWorker(local_ip_.c_str(), local_port_, true);
-  for(auto mazeEndIter : {3, 8 ,16})
+  for (const auto & entry : fs::directory_iterator(parentDir)) 
   {
-    for(auto markerCost : {2, 4, 8, 16, 32, 64})
+    if (!entry.is_directory())
+      continue;
+    if (entry.path() == "results/shared_volume")
+      continue;
+    std::string dumpDir = entry.path();
+    updateGlobals(fmt::format("{}/init_globals.bin", dumpDir).c_str());
+    resetDb(fmt::format("{}/design.odb", dumpDir).c_str());
+    updateDesign(fmt::format("{}/updates.bin", dumpDir).c_str());
+    updateGlobals(fmt::format("{}/worker_globals.bin", dumpDir).c_str());
+    MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
+    omp_set_num_threads(MAX_THREADS);
+    std::vector<SearchRepairArgs> strategies;
+    for(auto mazeEndIter : {3, 8 ,16})
     {
-      for(auto drcCost : {2, 4, 8, 16, 32, 64})
+      for(auto markerCost : {2, 4, 8, 16, 32, 64})
       {
-        for(auto followGuide : {true, false})
+        for(auto drcCost : {2, 4, 8, 16, 32, 64})
         {
-          SearchRepairArgs args = {7, (int) strategies.size(), mazeEndIter, ROUTESHAPECOST * drcCost, MARKERCOST * markerCost, 0, followGuide};
-          strategies.push_back(args);
+          for (auto followGuide : {true, false}) {
+            SearchRepairArgs args = {7,
+                                    (int) strategies.size(),
+                                    mazeEndIter,
+                                    ROUTESHAPECOST * drcCost,
+                                    MARKERCOST * markerCost,
+                                    0,
+                                    followGuide};
+            strategies.push_back(args);
+          }
         }
       }
     }
-  }
-  int size = strategies.size();
-  std::ifstream workerFile(fmt::format("{}/worker.bin", dumpDir),
+    int size = strategies.size();
+    std::ifstream workerFile(fmt::format("{}/worker.bin", dumpDir),
                             std::ios::binary);
-  std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
-                        std::istreambuf_iterator<char>());
-  workerFile.close();
-  {
-    auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr); 
-    logger_->report("Initial Number of Violations is {}", worker->getInitNumMarkers());
-  }
-  logger_->report("Trying {} strategies", size);
-  if(distributed_)
-  {
-    int batchSize = size / getCloudSize();
-    asio::thread_pool listenPool(1);
-    asio::post(listenPool, [this, size, strategies](){
-      int remaining = size;
-      bool init = true;
-      while(remaining)
-      {
-        std::vector<WorkerResult> results;
-        if(!getWorkerResults(results))
-        {
-          sleep(1);
-          continue;
+    std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
+                          std::istreambuf_iterator<char>());
+    mongocxx::client client{mongocxx::uri{}};
+    mongocxx::database mongodb = client["DRT"];
+    std::string workerId;
+    workerFile.close();
+    {
+      auto worker
+          = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+      logger_->report("Initial Number of Violations is {}",
+                      worker->getInitNumMarkers());
+      worker->init(getDesign());
+      std::map<frLayerNum, std::pair<float, float>> density;
+      worker->calcDensity(density);
+      std::map<frLayerNum, std::map<frConstraintTypeEnum, int>> markers;
+      for (const auto& marker : worker->getMarkers()) {
+        if (marker.getConstraint())
+          markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
+      }
+      // update mongo db
+      mongocxx::collection coll = mongodb["workers"];
+      auto builder = document{};
+      builder << "design" << getDesign()->getTopBlock()->getName() << "platform"
+              << (*db_->getLibs().begin())->getName() << "xMin"
+              << worker->getRouteBox().xMin() << "yMin"
+              << worker->getRouteBox().yMin() << "iter" << worker->getDRIter()
+              << "pinCnt" << worker->getPinCnt() << "termCnt"
+              << worker->getTermCnt() << "area"
+              << (long) worker->getRouteBox().area();
+      
+      for (frLayerNum lNum = std::max(
+              BOTTOM_ROUTING_LAYER, getDesign()->getTech()->getBottomLayerNum());
+          lNum <= std::min(TOP_ROUTING_LAYER,
+                            getDesign()->getTech()->getTopLayerNum());
+          lNum++) {
+        builder << getDesign()->getTech()->getLayer(lNum)->getName()
+                << open_document
+                << "routeDensity" << density[lNum].first 
+                << "fixedDensity" << density[lNum].second;
+        for (auto [type, num] : markers[lNum]) {
+          std::ostringstream stream;
+          stream << type;
+          std::string str = stream.str();
+          builder << str << num;
         }
-        remaining -= results.size();
-        if(init)
-        {
-          init = false;
-          auto ops = results[0].heapOps;
-          auto desc = std::make_unique<TimeOutDescription>();
-          desc->setMaxOps(ops);
-          dst::JobMessage msg(dst::JobMessage::TIMEOUT), resMsg;
-          msg.setJobDescription(std::move(desc));
-          dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, resMsg);
+        builder << close_document;
+      }
+      bsoncxx::document::value doc_value = builder << finalize;
+      for (auto doc : coll.find(doc_value.view())) {
+        workerId = doc["_id"].get_oid().value.to_string();
+      }
+      if (workerId.empty()) {
+        bsoncxx::stdx::optional<mongocxx::result::insert_one> result
+            = coll.insert_one(std::move(doc_value));
+        workerId = result.value().inserted_id().get_oid().value.to_string();
+      }
+      logger_->report("Inserted/Acknowledge worker {} to mongodb", workerId);
+    }
+    logger_->report("Trying {} strategies", size);
+    if (distributed_) {
+      int batchSize = size / getCloudSize();
+      asio::thread_pool listenPool(1);
+      asio::post(listenPool, [this, size, strategies, mongodb, workerId]() {
+        int remaining = size;
+        bool timeout = false;
+        long long maxOps = 0;
+        high_resolution_clock::time_point t0 = high_resolution_clock::now();
+        while (remaining) {
+          high_resolution_clock::time_point t1 = high_resolution_clock::now();
+          if (duration_cast<hours>(t1 - t0).count() >= 2 && !timeout) {
+            timeout = true;
+            auto desc = std::make_unique<TimeOutDescription>();
+            desc->setMaxOps(maxOps);
+            dst::JobMessage msg(dst::JobMessage::TIMEOUT), resMsg;
+            msg.setJobDescription(std::move(desc));
+            dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, resMsg);
+          }
+
+          std::vector<WorkerResult> results;
+          if (!getWorkerResults(results)) {
+            sleep(1);
+            continue;
+          }
+         
+          remaining -= results.size();
+          for (auto result : results) {
+            maxOps = std::max(maxOps, result.heapOps);
+            auto args = strategies[result.id];
+            debugPrint(
+                logger_,
+                utl::DRT,
+                "autotuner",
+                1,
+                "{}_{}_{}_{}_{} Number of markers {} heap ops {}",
+                args.mazeEndIter,
+                args.workerDRCCost,
+                args.workerMarkerCost,
+                args.ripupMode,
+                args.followGuide,
+                result.numOfViolations,
+                result.heapOps);
+            //update document mongodb
+            mongocxx::collection coll = mongodb["workers"];
+            document filter_builder, update_builder;
+            filter_builder << "_id" << bsoncxx::oid(workerId);
+            update_builder << "$push" << open_document << "results" << open_document 
+                        <<  "mazeEndIter" << (int) args.mazeEndIter 
+                        <<  "workerDRCCost" << (int) args.workerDRCCost 
+                        <<  "workerMarkerCost" << (int) args.workerMarkerCost 
+                        <<  "followGuide" << args.followGuide 
+                        <<  "markers" << result.numOfViolations
+                        <<  "time" << result.runTime
+                        <<  "mazeSearchOps" << (long) result.heapOps
+                        << close_document << close_document;
+            coll.update_one(filter_builder.view(), update_builder.view());
+          }
         }
-        for(auto result : results)
+      });
+      copyFile(fmt::format("{}/init_globals.bin", dumpDir).c_str(),
+              fmt::format("{}init_globals.bin", shared_volume_).c_str());
+      copyFile(fmt::format("{}/design.odb", dumpDir).c_str(),
+              fmt::format("{}design.odb", shared_volume_).c_str());
+      copyFile(fmt::format("{}/updates.bin", dumpDir).c_str(),
+              fmt::format("{}updates.bin", shared_volume_).c_str());
+      copyFile(fmt::format("{}/worker_globals.bin", dumpDir).c_str(),
+              fmt::format("{}worker_globals.bin", shared_volume_).c_str());
+      copyFile(fmt::format("{}/viadata.bin", dumpDir).c_str(),
+              fmt::format("{}viadata.bin", shared_volume_).c_str());
+      copyFile(fmt::format("{}/worker.bin", dumpDir).c_str(),
+              fmt::format("{}worker.bin", shared_volume_).c_str());
+      #pragma omp parallel for schedule(dynamic)
+      for (int i = 0; i < size; i += batchSize) {
+        sendSingleWorkerEnv(strategies, i, batchSize);
+      }
+      listenPool.join();
+
+    } else {
+      FlexDRViaData viaData;
+      std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dumpDir),
+                                std::ios::binary);
+      frIArchive ar(viaDataFile);
+      ar >> viaData;
+      #pragma omp parallel for schedule(dynamic)
+      for (int i = 0; i < strategies.size(); i++) {
+        const auto& args = strategies[i];
+        auto worker
+            = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+        worker->setMazeEndIter(args.mazeEndIter);
+        worker->setMarkerCost(args.workerMarkerCost);
+        worker->setDrcCost(args.workerDRCCost);
+        worker->setRipupMode(args.ripupMode);
+        worker->setFollowGuide((args.followGuide));
+        worker->setViaData(&viaData);
+        high_resolution_clock::time_point t0 = high_resolution_clock::now();
+        worker->reloadedMain();
+        high_resolution_clock::time_point t1 = high_resolution_clock::now();
+        seconds time_span = duration_cast<seconds>(t1 - t0);
+        #pragma omp critical
         {
-          auto args = strategies[result.id];
           debugPrint(logger_,
                     utl::DRT,
                     "autotuner",
                     1,
-                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {} heap ops {}",
-                    args.mazeEndIter,
-                    args.workerDRCCost,
-                    args.workerMarkerCost,
-                    args.ripupMode,
-                    args.followGuide,
-                    result.numOfViolations,
-                    result.runTime,
-                    result.heapOps
-                    );
-        }
-      }
-    });
-    copyFile(fmt::format("{}/init_globals.bin", dumpDir).c_str(), fmt::format("{}init_globals.bin", shared_volume_).c_str());
-    copyFile(fmt::format("{}/design.odb", dumpDir).c_str(), fmt::format("{}design.odb", shared_volume_).c_str());
-    copyFile(fmt::format("{}/updates.bin", dumpDir).c_str(), fmt::format("{}updates.bin", shared_volume_).c_str());
-    copyFile(fmt::format("{}/worker_globals.bin", dumpDir).c_str(), fmt::format("{}worker_globals.bin", shared_volume_).c_str());
-    copyFile(fmt::format("{}/viadata.bin", dumpDir).c_str(), fmt::format("{}viadata.bin", shared_volume_).c_str());
-    copyFile(fmt::format("{}/worker.bin", dumpDir).c_str(), fmt::format("{}worker.bin", shared_volume_).c_str());
-    #pragma omp parallel for schedule(dynamic)
-    for(int i = 0; i < size; i += batchSize)
-    {
-      sendSingleWorkerEnv(strategies, i, batchSize);
-    }
-    listenPool.join();
-    
-  } else {
-    FlexDRViaData viaData;
-    std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dumpDir),
-                              std::ios::binary);
-    frIArchive ar(viaDataFile);
-    ar >> viaData;
-    #pragma omp parallel for schedule(dynamic)
-    for(int i = 0; i < strategies.size(); i++)
-    {
-      const auto& args = strategies[i];
-      auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr); 
-      worker->setMazeEndIter(args.mazeEndIter);
-      worker->setMarkerCost(args.workerMarkerCost);
-      worker->setDrcCost(args.workerDRCCost);
-      worker->setRipupMode(args.ripupMode);
-      worker->setFollowGuide((args.followGuide));
-      worker->setViaData(&viaData);
-      high_resolution_clock::time_point t0 = high_resolution_clock::now();
-      worker->reloadedMain();
-      high_resolution_clock::time_point t1 = high_resolution_clock::now();
-      seconds time_span = duration_cast<seconds>(t1 - t0);
-      #pragma omp critical
-      {
-        debugPrint(logger_,
-                    utl::DRT,
-                    "autotuner",
-                    1,
-                    "{}_{}_{}_{}_{} Number of markers {} elapsed time {:02}:{:02}:{:02}",
+                    "{}_{}_{}_{}_{} Number of markers {} elapsed time "
+                    "{:02}:{:02}:{:02}",
                     args.mazeEndIter,
                     args.workerDRCCost,
                     args.workerMarkerCost,
@@ -440,10 +545,24 @@ void TritonRoute::debugSingleWorker(const std::string& dumpDir,
                     worker->getBestNumMarkers(),
                     frTime::getHours(time_span.count()),
                     frTime::getMinutes(time_span.count()),
-                    frTime::getSeconds(time_span.count())
-                    );
+                    frTime::getSeconds(time_span.count()));
+          //update document mongodb
+          mongocxx::collection coll = mongodb["workers"];
+          document filter_builder, update_builder;
+          filter_builder << "_id" << bsoncxx::oid(workerId) << finalize;
+          update_builder << "$push" << open_document << "results" << open_document 
+                        <<  "mazeEndIter" << (int) args.mazeEndIter 
+                        <<  "workerDRCCost" << (int) args.workerDRCCost 
+                        <<  "workerMarkerCost" << (int) args.workerMarkerCost 
+                        <<  "followGuide" << args.followGuide 
+                        <<  "markers" << worker->getBestNumMarkers()
+                        <<  "time" << time_span.count()
+                        <<  "mazeSearchOps" << (long) worker->getHeapOps()
+                        << close_document << close_document << finalize;
+          coll.update_one(filter_builder.view(), update_builder.view());
+        }
+        worker.reset();
       }
-      worker.reset();
     }
   }
 }
@@ -831,8 +950,7 @@ void TritonRoute::sendDesignDist(bool writeFiles)
   if (distributed_) {
     std::string design_path = fmt::format("{}DESIGN.db", shared_volume_);
     std::string globals_path = fmt::format("{}DESIGN.globals", shared_volume_);
-    if(writeFiles)
-    {
+    if (writeFiles) {
       ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
       writeGlobals(globals_path.c_str());
     }
@@ -851,10 +969,15 @@ void TritonRoute::sendDesignDist(bool writeFiles)
     bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
     if (!ok)
       logger_->error(DRT, 1015, "Updating design remotely failed");
-    dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
-    if(resultDesc->getWorkersCount() != getCloudSize())
-    {
-      logger_->info(DRT, 1012, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+    dst::BroadcastJobDescription* resultDesc
+        = static_cast<dst::BroadcastJobDescription*>(
+            result.getJobDescription());
+    if (resultDesc->getWorkersCount() != getCloudSize()) {
+      logger_->info(DRT,
+                    1012,
+                    "Cloud size changed from {} to {}",
+                    getCloudSize(),
+                    resultDesc->getWorkersCount());
       setCloudSize(resultDesc->getWorkersCount());
     }
   }
@@ -890,23 +1013,27 @@ void TritonRoute::sendGlobalsUpdates(const std::string& globals_path,
   bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   if (!ok)
     logger_->error(DRT, 9504, "Updating globals remotely failed");
-  dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
-  if(resultDesc->getWorkersCount() != getCloudSize())
-  {
-    logger_->info(DRT, 1013, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+  dst::BroadcastJobDescription* resultDesc
+      = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
+  if (resultDesc->getWorkersCount() != getCloudSize()) {
+    logger_->info(DRT,
+                  1013,
+                  "Cloud size changed from {} to {}",
+                  getCloudSize(),
+                  resultDesc->getWorkersCount());
     setCloudSize(resultDesc->getWorkersCount());
   }
 }
 
-void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeFiles)
+void TritonRoute::sendDesignUpdates(const std::string& globals_path,
+                                    bool writeFiles)
 {
   if (!distributed_)
     return;
   if (!design_->hasUpdates() && writeFiles)
     return;
   std::vector<std::string> updates;
-  if(writeFiles)
-  {
+  if (writeFiles) {
     updates.resize(design_->getUpdates().size());
     std::unique_ptr<ProfileTask> serializeTask;
     if (design_->getVersion() == 0)
@@ -915,7 +1042,7 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
       serializeTask = std::make_unique<ProfileTask>("DIST: SERIALIZE_UPDATES");
     const auto& designUpdates = design_->getUpdates();
     omp_set_num_threads(MAX_THREADS);
-    #pragma omp parallel for schedule(dynamic)
+#pragma omp parallel for schedule(dynamic)
     for (int i = 0; i < designUpdates.size(); i++) {
       updates[i] = fmt::format("{}updates_{}.bin", shared_volume_, i);
       serializeUpdatesBatch(designUpdates.at(i), updates[i]);
@@ -943,10 +1070,14 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
   bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   if (!ok)
     logger_->error(DRT, 304, "Updating design remotely failed");
-  dst::BroadcastJobDescription* resultDesc = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
-  if(resultDesc->getWorkersCount() != getCloudSize())
-  {
-    logger_->info(DRT, 1014, "Cloud size changed from {} to {}", getCloudSize(), resultDesc->getWorkersCount());
+  dst::BroadcastJobDescription* resultDesc
+      = static_cast<dst::BroadcastJobDescription*>(result.getJobDescription());
+  if (resultDesc->getWorkersCount() != getCloudSize()) {
+    logger_->info(DRT,
+                  1014,
+                  "Cloud size changed from {} to {}",
+                  getCloudSize(),
+                  resultDesc->getWorkersCount());
     setCloudSize(resultDesc->getWorkersCount());
   }
   task->done();
@@ -956,14 +1087,15 @@ void TritonRoute::sendDesignUpdates(const std::string& globals_path, bool writeF
 
 int TritonRoute::main()
 {
-  if(debug_->debugDumpDR)
-  {
-    std::string globals_path = fmt::format("{}/init_globals.bin", debug_->dumpDir);
+  if (debug_->debugDumpDR) {
+    std::string globals_path
+        = fmt::format("{}/init_globals.bin", debug_->dumpDir);
     writeGlobals(globals_path);
   }
   MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
   if (distributed_ && !DO_PA) {
-    asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this, true));
+    asio::post(dist_pool_,
+               boost::bind(&TritonRoute::sendDesignDist, this, true));
   }
   initDesign();
   if (DO_PA) {
@@ -974,7 +1106,8 @@ int TritonRoute::main()
       io::Writer writer(getDesign(), logger_);
       writer.updateDb(db_, true);
       if (distributed_)
-        asio::post(dist_pool_, boost::bind(&TritonRoute::sendDesignDist, this, true));
+        asio::post(dist_pool_,
+                   boost::bind(&TritonRoute::sendDesignDist, this, true));
     }
   }
   if (debug_->debugDumpDR) {
@@ -1199,8 +1332,7 @@ bool TritonRoute::getWorkerResults(
   return true;
 }
 
-void TritonRoute::addWorkerResults(
-    const std::vector<fr::WorkerResult>& results)
+void TritonRoute::addWorkerResults(const std::vector<fr::WorkerResult>& results)
 {
   std::unique_lock<std::mutex> lock(results_mutex_);
   stubborn_results_.insert(
@@ -1208,8 +1340,7 @@ void TritonRoute::addWorkerResults(
   results_sz_ = stubborn_results_.size();
 }
 
-bool TritonRoute::getWorkerResults(
-    std::vector<fr::WorkerResult>& results)
+bool TritonRoute::getWorkerResults(std::vector<fr::WorkerResult>& results)
 {
   std::unique_lock<std::mutex> lock(results_mutex_);
   if (stubborn_results_.empty())

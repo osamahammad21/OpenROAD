@@ -813,6 +813,46 @@ void FlexDRWorker::initNets_searchRepair(
   }
 }
 
+void addToPolySet(gtl::polygon_90_set_data<frCoord>& polySet, Rect rect)
+{
+  using namespace boost::polygon::operators;
+  gtl::polygon_90_data<frCoord> poly;
+  vector<gtl::point_data<frCoord>> points;
+  for (auto point : rect.getPoints()) {
+    points.push_back({point.x(), point.y()});
+  }
+  poly.set(points.begin(), points.end());
+  polySet += poly;
+}
+
+void FlexDRWorker::calcDensity(std::map<frLayerNum, std::pair<float, float>>& density)
+{
+  for(frLayerNum lNum = getDesign()->getTech()->getBottomLayerNum(); lNum <= getDesign()->getTech()->getTopLayerNum();lNum++)
+  {
+    gtl::polygon_90_set_data<frCoord> polySet;
+    std::vector<rq_box_value_t<frBlockObject*>> result;
+    getDesign()->getRegionQuery()->queryDRObj(getRouteBox(), lNum, result);
+    for(auto [box, obj] : result)
+    {
+      auto enclosedBox = getRouteBox().intersect(box);
+      addToPolySet(polySet, enclosedBox);
+    }
+    auto area = gtl::area(polySet);
+    density[lNum].first = area / (float) getRouteBox().area() * 100;
+    polySet.clear();
+    result.clear();
+    getDesign()->getRegionQuery()->query(getRouteBox(), lNum, result);
+    for(auto [box, obj] : result)
+    {
+      auto enclosedBox = getRouteBox().intersect(box);
+      addToPolySet(polySet, enclosedBox);
+    }
+    area = gtl::area(polySet);
+    density[lNum].second = area / (float) getRouteBox().area() * 100;
+    polySet.clear();
+  }
+}
+
 bool FlexDRWorker::findAPTracks(frLayerNum startLayerNum,
                                 frLayerNum endLayerNum,
                                 Rectangle& pinRect,
@@ -1516,6 +1556,7 @@ void FlexDRWorker::initNet_term_new_helper(const frDesign* design,
   }
   dPin->setId(pinCnt_);
   pinCnt_++;
+  termCnt_++;
   dNet->addPin(std::move(dPin));
 }
 

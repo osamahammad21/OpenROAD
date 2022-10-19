@@ -353,6 +353,7 @@ class FlexDRWorker
         workerMarkerCost_(MARKERCOST),
         boundaryPin_(),
         pinCnt_(0),
+        termCnt_(0),
         initNumMarkers_(0),
         apSVia_(),
         planarHistoryMarkers_(),
@@ -379,6 +380,7 @@ class FlexDRWorker
         debugSettings_(nullptr),
         via_data_(nullptr),
         boundaryPin_(),
+        termCnt_(0),
         rq_(this),
         gcWorker_(nullptr),
         dist_on_(false),
@@ -455,7 +457,7 @@ class FlexDRWorker
   void clearMarkers() { markers_.clear(); }
   void setInitNumMarkers(int in) { initNumMarkers_ = in; }
   void setGCWorker(unique_ptr<FlexGCWorker> in) { gcWorker_ = std::move(in); }
-
+  void calcDensity(std::map<frLayerNum, std::pair<float, float>>& density);
   void setGraphics(FlexDRGraphics* in)
   {
     graphics_ = in;
@@ -555,7 +557,9 @@ class FlexDRWorker
   void incConnections() { ++connections_; }
   long long getHeapOps() const { return heap_ops_; }
   int getConnections() const { return connections_; }
-
+  int getPinCnt() const { return pinCnt_; }
+  int getTermCnt() const { return termCnt_; }
+  void init(const frDesign* design);
  private:
   typedef struct
   {
@@ -584,6 +588,7 @@ class FlexDRWorker
   std::map<frNet*, std::set<std::pair<Point, frLayerNum>>, frBlockObjectComp>
       boundaryPin_;
   int pinCnt_;
+  int termCnt_;
   int initNumMarkers_;
   std::map<FlexMazeIdx, drAccessPattern*> apSVia_;
   std::set<FlexMazeIdx> planarHistoryMarkers_;
@@ -615,7 +620,7 @@ class FlexDRWorker
   long long heap_ops_;
   int connections_;
   // init
-  void init(const frDesign* design);
+  
   void initNets(const frDesign* design);
   void initNetObjs(
       const frDesign* design,
