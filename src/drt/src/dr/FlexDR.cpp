@@ -58,6 +58,7 @@
 #include "ord/OpenRoad.hh"
 #include "serialization.h"
 #include "utl/exception.h"
+#include <Python.h>
 
 using namespace std;
 using namespace fr;
@@ -1890,6 +1891,7 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
                        design_->getTopBlock()->getMarkers());
   }
 }
+
 void FlexDR::distributeStubbornTiles(
           std::vector<std::pair<int, FlexDRWorker*>> routableWorkers, 
           std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch)

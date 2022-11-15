@@ -156,7 +156,8 @@ class TritonRoute
   void runDRWorker(std::unique_ptr<fr::FlexDRWorker>& worker,
                    const std::string& workerStr,
                    fr::FlexDRViaData* viaData);
-  void debugSingleWorker(const std::string& dumpDir, const std::string& drcRpt);
+  void genWorkersResults(const std::string& parentDir);
+  void debugSingleWorker(const std::string& parentDir, const std::string& worker_name, const std::string& drcRpt);
   void updateGlobals(const char* file_name);
   void resetDb(const char* file_name);
   void updateDesign(const std::vector<std::string>& updates);

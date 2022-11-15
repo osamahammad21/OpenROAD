@@ -187,11 +187,19 @@ set_worker_debug_params(int maze_end_iter,
 }
 
 void
-run_worker_cmd(const char* dump_dir, const char* drc_rpt)
+run_worker_cmd(const char* dump_dir, const char* worker_name, const char* drc_rpt)
 {
   auto* router = ord::OpenRoad::openRoad()->getTritonRoute();
   
-  router->debugSingleWorker(dump_dir, drc_rpt);
+  router->debugSingleWorker(dump_dir, worker_name, drc_rpt);
+}
+
+void
+run_workers_cmd(const char* dump_dir)
+{
+  auto* router = ord::OpenRoad::openRoad()->getTritonRoute();
+  
+  router->genWorkersResults(dump_dir);
 }
 
 void detailed_route_step_drt(int size,

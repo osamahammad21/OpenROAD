@@ -3447,7 +3447,19 @@ void FlexDRWorker::initMarkers(const frDesign* design)
 
 void FlexDRWorker::init(const frDesign* design)
 {
-  initNets(design);
+  if(nets_.empty())
+    initNets(design);
+  else
+  {
+    markers_ = bestMarkers_;
+    bestMarkers_.clear();
+    for(auto& net : nets_)
+    {
+      net->updateRouteConnFigs();
+      owner2nets_[net->getFrNet()].push_back(net.get());
+    }
+    initNets_regionQuery();
+  }
   initGridGraph(design);
   initMazeIdx();
   std::unique_ptr<FlexGCWorker> gcWorker = make_unique<FlexGCWorker>(design->getTech(), logger_, this);

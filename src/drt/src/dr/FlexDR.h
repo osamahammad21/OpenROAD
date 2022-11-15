@@ -370,7 +370,8 @@ class FlexDRWorker
         isCongested_(false),
         save_updates_(false),
         heap_ops_(0),
-        connections_(0)
+        connections_(0),
+        begin_(true)
   {
   }
   FlexDRWorker()
@@ -387,7 +388,8 @@ class FlexDRWorker
         isCongested_(false),
         save_updates_(false),
         heap_ops_(0),
-        connections_(0)
+        connections_(0),
+        begin_(true)
   {
   }
   // setters
@@ -619,6 +621,7 @@ class FlexDRWorker
   bool save_updates_;
   long long heap_ops_;
   int connections_;
+  bool begin_;
   // init
   
   void initNets(const frDesign* design);

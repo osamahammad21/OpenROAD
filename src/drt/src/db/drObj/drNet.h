@@ -87,6 +87,16 @@ class drNet : public drBlockObject
   {
     return bestRouteConnFigs_;
   }
+  void updateRouteConnFigs()
+  {
+    routeConnFigs_.clear();
+    routeConnFigs_.reserve(bestRouteConnFigs_.size());
+    for(auto& connFig : bestRouteConnFigs_)
+    {
+      routeConnFigs_.push_back(std::move(connFig));
+    }
+    bestRouteConnFigs_.clear();
+  }
   frNet* getFrNet() const { return fNet_; }
   void setFrNet(frNet* net) { fNet_ = net; }
   const std::set<frBlockObject*>& getFrNetTerms() const { return fNetTerms_; }

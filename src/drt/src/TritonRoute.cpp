@@ -61,6 +61,9 @@
 #include "distributed/WorkerResult.h"
 #include "dst/BroadcastJobDescription.h"
 #include "distributed/TimeOutDescription.h"
+#include <Python.h>
+#include <boost/python.hpp>
+
 #ifdef MONGODB
 #include <bsoncxx/json.hpp>
 #include <mongocxx/client.hpp>
@@ -83,6 +86,8 @@ namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
 using namespace triton_route;
+using namespace boost::python;
+
 namespace sta {
 // Tcl files encoded into strings.
 extern const char* drt_tcl_inits[];
@@ -101,6 +106,14 @@ TritonRoute::TritonRoute()
       results_sz_(0),
       dist_pool_(1)
 {
+  // Py_Initialize();
+  // object sys_module = import("sys"); 
+  // str module_directory = "/home/osama/Desktop/OpenROAD-new/build/";
+  // sys_module.attr("path").attr("insert")(1, module_directory);
+  // auto pyModule = import("testpy");
+  // boost::python::dict mmap;
+  // mmap["Key"] = 21;
+  // std::cout << call_method<int>(pyModule.ptr(), "getInteger", 3, mmap) << std::endl;
 }
 
 TritonRoute::~TritonRoute()
@@ -333,8 +346,7 @@ void TritonRoute::sendSingleWorkerEnv(
   dist_->sendJob(msg, remote_ip.c_str(), remote_port, result);
 }
 
-void TritonRoute::debugSingleWorker(const std::string& parentDir,
-                                    const std::string& drcRpt)
+void TritonRoute::genWorkersResults(const std::string& parentDir)
 {
   if (distributed_)
     dist_->runWorker(local_ip_.c_str(), local_port_, true);
@@ -579,6 +591,61 @@ void TritonRoute::debugSingleWorker(const std::string& parentDir,
       }
     }
   }
+}
+
+void TritonRoute::debugSingleWorker(const std::string& parentDir,
+                                    const std::string& worker_name, 
+                                    const std::string& drcRpt)
+{  
+  std::string dumpDir = fmt::format("{}/{}", parentDir, worker_name);
+  updateGlobals(fmt::format("{}/init_globals.bin", parentDir).c_str());
+  resetDb(fmt::format("{}/design.odb", parentDir).c_str());
+  updateDesign(fmt::format("{}/updates.bin", dumpDir).c_str());
+  updateGlobals(fmt::format("{}/worker_globals.bin", dumpDir).c_str());
+  std::ifstream workerFile(fmt::format("{}/worker.bin", dumpDir),
+                          std::ios::binary);
+  std::string workerStr((std::istreambuf_iterator<char>(workerFile)),
+                        std::istreambuf_iterator<char>());
+  std::string workerId;
+  workerFile.close();
+  {
+    auto worker
+        = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+    logger_->report("Initial Number of Violations is {}",
+                    worker->getInitNumMarkers());
+    worker->init(getDesign());
+    std::map<frLayerNum, std::pair<float, float>> density;
+    worker->calcDensity(density);
+    std::map<frLayerNum, std::map<frConstraintTypeEnum, int>> markers;
+    for (const auto& marker : worker->getMarkers()) {
+      if (marker.getConstraint())
+        markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
+    }
+  }
+  
+  FlexDRViaData viaData;
+  std::ifstream viaDataFile(fmt::format("{}/viadata.bin", dumpDir),
+                            std::ios::binary);
+  frIArchive ar(viaDataFile);
+  ar >> viaData;
+  auto worker = FlexDRWorker::load(workerStr, logger_, design_.get(), nullptr);
+  worker->setViaData(&viaData);
+  high_resolution_clock::time_point t0 = high_resolution_clock::now();
+  worker->reloadedMain();
+  worker->reloadedMain();
+  high_resolution_clock::time_point t1 = high_resolution_clock::now();
+  seconds time_span = duration_cast<seconds>(t1 - t0); 
+  debugPrint(logger_,
+            utl::DRT,
+            "autotuner",
+            1,
+            "Number of markers {} elapsed time "
+            "{:02}:{:02}:{:02}",
+            worker->getBestNumMarkers(),
+            frTime::getHours(time_span.count()),
+            frTime::getMinutes(time_span.count()),
+            frTime::getSeconds(time_span.count()));
+  // reportDRC(drcRpt, worker->getMa());
 }
 
 void TritonRoute::test()
