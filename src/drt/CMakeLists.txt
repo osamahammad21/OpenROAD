@@ -43,8 +43,9 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT error)
+find_package(PythonLibs 3.9 REQUIRED)
+find_package(Boost REQUIRED COMPONENTS serialization system python)
 
-find_package(Boost REQUIRED COMPONENTS serialization system)
 find_package(OpenMP REQUIRED)
 find_package(VTune)
 if (MONGODB)
@@ -146,6 +147,7 @@ target_include_directories(drt
 
   PRIVATE
     src
+    ${PYTHON_INCLUDE_DIRS}
 )
 
 target_link_libraries(drt
@@ -161,6 +163,7 @@ target_link_libraries(drt
     OpenMP::OpenMP_CXX
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
+    ${PYTHON_LIBRARIES}
 )
 if (MONGODB)
   target_link_libraries(drt
@@ -226,7 +229,6 @@ if (Boost_unit_test_framework_FOUND)
 endif()
 
 add_test(NAME trTest COMMAND trTest)
-
 ############################################################
 # VTune ITT API
 ############################################################
