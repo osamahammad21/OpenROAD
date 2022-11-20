@@ -43,12 +43,13 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
 include(CheckIPOSupported)
 check_ipo_supported(RESULT ipo_supported OUTPUT error)
-find_package(PythonLibs 3.9 REQUIRED)
-find_package(Boost REQUIRED COMPONENTS serialization system python)
+find_package(Boost REQUIRED COMPONENTS serialization system)
 
 find_package(OpenMP REQUIRED)
 find_package(VTune)
 if (MONGODB)
+  find_package(PythonLibs 3.9 REQUIRED)
+  find_package(Boost REQUIRED COMPONENTS python)
   find_package(libmongocxx REQUIRED)
   find_package(libbsoncxx REQUIRED)
   include_directories(${LIBMONGOCXX_INCLUDE_DIR})
@@ -147,7 +148,6 @@ target_include_directories(drt
 
   PRIVATE
     src
-    ${PYTHON_INCLUDE_DIRS}
 )
 
 target_link_libraries(drt
@@ -163,14 +163,19 @@ target_link_libraries(drt
     OpenMP::OpenMP_CXX
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
-    ${PYTHON_LIBRARIES}
 )
 if (MONGODB)
   target_link_libraries(drt
     PUBLIC
       ${LIBMONGOCXX_LIBRARIES}
       ${LIBBSONCXX_LIBRARIES}
+      ${PYTHON_LIBRARIES}
   )
+  target_include_directories(drt
+  PRIVATE
+    ${PYTHON_INCLUDE_DIRS}
+)
+
   target_compile_definitions(drt
     PUBLIC
     MONGODB=1

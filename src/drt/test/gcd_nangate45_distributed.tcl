@@ -4,7 +4,7 @@ set OR $argv0
 set server1 [$OR server1.tcl > results/server1.log &]
 set server2 [$OR server2.tcl > results/server2.log &]
 set balancer [$OR balancer.tcl > results/balancer.log &]
-set base [$OR -exit gcd_nangate45.tcl > results/base.log &]
+# set base [$OR -exit gcd_nangate45.tcl > results/base.log &]
 
 read_lef Nangate45/Nangate45_tech.lef
 read_lef Nangate45/Nangate45_stdcell.lef
@@ -28,9 +28,9 @@ exec kill $server2
 exec kill $balancer
 set def_file results/gcd_nangate45.def
 write_def $def_file
-set running [file exists /proc/$base]
-while { $running } {
-  sleep 1
-  set running [file exists /proc/$base]
-}
-diff_files results/gcd_nangate45.defok $def_file
+# set running [file exists /proc/$base]
+# while { $running } {
+#   sleep 1
+#   set running [file exists /proc/$base]
+# }
+# diff_files results/gcd_nangate45.defok $def_file

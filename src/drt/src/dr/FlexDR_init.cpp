@@ -3423,6 +3423,10 @@ void FlexDRWorker::initMazeCost_boundary_helper(drNet* net, bool isAddPathCost)
 
 void FlexDRWorker::initMarkers(const frDesign* design)
 {
+  markers_.clear();
+  initNumMarkers_ = 0;
+  needRecheck_ = false;
+  skipRouting_ = false;
   vector<frMarker*> result;
   design->getRegionQuery()->queryMarker(
       getDrcBox(),
@@ -3447,12 +3451,14 @@ void FlexDRWorker::initMarkers(const frDesign* design)
 
 void FlexDRWorker::init(const frDesign* design)
 {
+  initialized_ = true;
   if(nets_.empty())
     initNets(design);
   else
   {
     markers_ = bestMarkers_;
     bestMarkers_.clear();
+    setInitNumMarkers(getNumMarkers());
     for(auto& net : nets_)
     {
       net->updateRouteConnFigs();

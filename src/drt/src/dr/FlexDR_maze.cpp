@@ -1596,7 +1596,7 @@ void FlexDRWorker::route_queue()
 
   // route
   route_queue_main(rerouteQueue);
-  if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
+  if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
     return;
   // end
   gcWorker_->resetTargetNet();
@@ -1621,7 +1621,6 @@ void FlexDRWorker::route_queue()
     auto& workerRegionQuery = getWorkerRegionQuery();
     workerRegionQuery.add(tmp.get());
     net->addRoute(std::move(tmp));
-    incConnections();
   }
 
   gcWorker_->end();
@@ -1771,7 +1770,7 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
       // route
       mazeNetInit(net);
       bool isRouted = routeNet(net);
-      if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
+      if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
         return;
       if (isRouted == false) {
         if (OUT_MAZE_FILE == string("")) {
@@ -1824,7 +1823,6 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
           auto& workerRegionQuery = getWorkerRegionQuery();
           workerRegionQuery.add(tmp.get());
           net->addRoute(std::move(tmp));
-          incConnections();
         }
         if (getDRIter() >= beginDebugIter
             && !getGCWorker()->getMarkers().empty()) {
@@ -2446,7 +2444,6 @@ void FlexDRWorker::routeNet_postAstarWritePath(
         unique_ptr<drConnFig> tmp(std::move(currVia));
         workerRegionQuery.add(tmp.get());
         net->addRoute(std::move(tmp));
-        incConnections();
         if (gridGraph_.hasRouteShapeCostAdj(
                 startX, startY, currZ, frDirEnum::U)) {
           net->addMarker();
@@ -2518,7 +2515,6 @@ bool FlexDRWorker::addApPathSegs(const FlexMazeIdx& apIdx, drNet* net)
     drPs->setMazeIdx(startIdx, endIdx);
     getWorkerRegionQuery().add(drPs.get());
     net->addRoute(std::move(drPs));
-    incConnections();
   }
   return true;
 }
@@ -2636,7 +2632,6 @@ void FlexDRWorker::processPathSeg(frMIdx startX,
   unique_ptr<drConnFig> tmp(std::move(currPathSeg));
   getWorkerRegionQuery().add(tmp.get());
   net->addRoute(std::move(tmp));
-  incConnections();
 
   // quick drc cnt
   bool prevHasCost = false;
@@ -2909,7 +2904,7 @@ bool FlexDRWorker::routeNet(drNet* net)
   bool isFirstConn = true;
   bool searchSuccess = true;
   while (!unConnPins.empty()) {
-    if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
+    if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
     {
       searchSuccess = false;
       break;
@@ -2934,7 +2929,7 @@ bool FlexDRWorker::routeNet(drNet* net)
       isFirstConn = false;
     } else {
       searchSuccess = false;
-      if(MAX_OPS != -1 && getHeapOps() > MAX_OPS)
+      if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
         break;
       logger_->report("Failed to find a path between pin " + nextPin->getName()
                       + " and source aps:");
@@ -3357,7 +3352,6 @@ void FlexDRWorker::routeNet_postAstarAddPatchMetal_addPWire(
   auto& workerRegionQuery = getWorkerRegionQuery();
   workerRegionQuery.add(tmp.get());
   net->addRoute(std::move(tmp));
-  incConnections();
 }
 
 void FlexDRWorker::routeNet_postAstarAddPatchMetal(drNet* net,

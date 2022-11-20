@@ -40,29 +40,32 @@ namespace fr {
 class StubbornRoutingJobDescription : public dst::JobDescription
 {
  public:
-  StubbornRoutingJobDescription() : reply_port_(0) {}
-  void setWorkers(const std::vector<std::tuple<int, std::string, SearchRepairArgs>>& workers)
-  {
-    workers_ = workers;
-  }
+  StubbornRoutingJobDescription() : worker_id_(0), reply_port_(0) {}
+  void setWorker(const std::string& value) { worker_ = value; }
+  void setWorkerId(const int& value) { worker_id_ = value; }
+  void setArgs(const std::vector<SearchRepairArgs>& value) {args_ = value; }
   void setReplyPort(ushort value) { reply_port_ = value; }
   void setReplyHost(const std::string& value) { reply_host_ = value; }
-  const std::vector<std::tuple<int, std::string, SearchRepairArgs>>& getWorkers()
-  {
-    return workers_;
-  }
+  const std::string& getWorker() const { return worker_; }
+  int getWorkerId() const { return worker_id_; }
+  const std::vector<SearchRepairArgs>& getArgs() const { return args_; }
   ushort getReplyPort() const { return reply_port_; }
   std::string getReplyHost() const { return reply_host_; }
 
  private:
-  std::vector<std::tuple<int, std::string, SearchRepairArgs>> workers_;
+  // std::vector<std::tuple<int, std::string, SearchRepairArgs>> workers_;
+  std::string worker_;
+  int worker_id_;
+  std::vector<SearchRepairArgs> args_;
   ushort reply_port_;
   std::string reply_host_;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
     (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
-    (ar) & workers_;
+    (ar) & worker_;
+    (ar) & worker_id_;
+    (ar) & args_;
     (ar) & reply_port_;
     (ar) & reply_host_;
   }

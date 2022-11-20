@@ -894,7 +894,7 @@ bool FlexGridGraph::search(vector<FlexMazeIdx>& connComps,
     drWorker_->incHeapOps();
   }
   while (!wavefront_.empty()) {
-    if(MAX_OPS != -1 && drWorker_->getHeapOps() > MAX_OPS)
+    if((MAX_OPS != -1 && drWorker_->getHeapOps() > MAX_OPS) || (drWorker_->router_ && drWorker_->router_->isWorkerBanned(drWorker_->id_in_batch_)))
       return false;
     auto currGrid = wavefront_.top();
     wavefront_.pop();

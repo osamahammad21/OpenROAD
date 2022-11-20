@@ -38,6 +38,7 @@
 #include <queue>
 #include <string>
 #include <vector>
+#include <set>
 
 #include "odb/geom.h"
 namespace fr {
@@ -181,7 +182,9 @@ class TritonRoute
   void checkDRC(const char* drc_file, int x0, int y0, int x1, int y1);
   void test();
   void sendSingleWorkerEnv(const std::vector<fr::SearchRepairArgs>& strategies, int begin, int size);
-
+  bool isWorkerBanned(const int id) { return banned_workers_.find(id) != banned_workers_.end(); }
+  void banWorker(const int id) { banned_workers_.insert(id); }
+  void clearBannerWorkers() { banned_workers_.clear(); }
  private:
   std::unique_ptr<fr::frDesign> design_;
   std::unique_ptr<fr::frDebugSettings> debug_;
@@ -205,6 +208,7 @@ class TritonRoute
   int results_sz_;
   unsigned int cloud_sz_;
   boost::asio::thread_pool dist_pool_;
+  std::set<int> banned_workers_;
 
   void initDesign();
   bool initGuide();

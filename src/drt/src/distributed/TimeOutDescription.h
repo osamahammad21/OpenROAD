@@ -37,17 +37,21 @@ namespace fr {
 class TimeOutDescription : public dst::JobDescription
 {
  public:
-  TimeOutDescription() : max_ops_(-1) {}
+  TimeOutDescription() : max_ops_(-1), banned_id_(-1) {}
   void setMaxOps(long long value) { max_ops_ = value; }
   long long getMaxOps() const { return max_ops_; }
+  void setBannedId(int value) { banned_id_ = value; }
+  int getBannedId() const { return banned_id_; }
 
  private:
   long long max_ops_;
+  int banned_id_;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
     (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
     (ar) & max_ops_;
+    (ar) & banned_id_;
   }
   friend class boost::serialization::access;
 };

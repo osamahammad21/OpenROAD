@@ -58,8 +58,12 @@
 #include "ord/OpenRoad.hh"
 #include "serialization.h"
 #include "utl/exception.h"
+#include "mongo.h"
+#ifdef MONGODB
 #include <Python.h>
-
+#include <boost/python.hpp>
+namespace bp = boost::python;
+#endif
 using namespace std;
 using namespace fr;
 using namespace std::chrono;
@@ -73,7 +77,6 @@ BOOST_CLASS_EXPORT(SearchRepairArgs)
 BOOST_CLASS_EXPORT(StubbornRoutingJobDescription)
 BOOST_CLASS_EXPORT(RoutingResultDescription)
 BOOST_CLASS_EXPORT(WorkerResult)
-
 
 enum class SerializationType
 {
@@ -1584,6 +1587,7 @@ void FlexDR::getBatchInfo(int& batchStepX, int& batchStepY)
   batchStepX = 2;
   batchStepY = 2;
 }
+
 static std::vector<SearchRepairArgs> sweepingStrategies()
 {
   std::vector<SearchRepairArgs> strategies;
@@ -1602,6 +1606,11 @@ static std::vector<SearchRepairArgs> sweepingStrategies()
     }
   }
   return strategies;
+}
+
+static std::vector<int> ripUpIterations()
+{
+  return {17, 25, 33, 41, 49, 57};
 }
 
 void FlexDR::searchRepair(const SearchRepairArgs& args)
@@ -1717,40 +1726,147 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
   }
 
   omp_set_num_threads(MAX_THREADS);
+  
   int version = 0;
   increaseClipsize_ = false;
   numWorkUnits_ = 0;
   int totalNumWorkUnits_ = 0;
-  // parallel execution
-  for (auto& workerBatch : workers) {
-    ProfileTask profile("DR:checkerboard");
-    for (auto& workersInBatch : workerBatch) {
-      int batchRoutableWorkUnits = 0;
-      {
-        const std::string batch_name = std::string("DR:batch<")
-                                       + std::to_string(workersInBatch.size())
-                                       + ">";
-        ProfileTask profile(batch_name.c_str());
-        if (dist_on_) {
-          router_->dist_pool_.join();
-          if (version++ == 0 && !design_->hasUpdates()) {
-            std::string serializedViaData;
-            serializeViaData(via_data_, serializedViaData);
-            router_->sendGlobalsUpdates(globals_path_, serializedViaData);
-          } else
-            router_->sendDesignUpdates(globals_path_);
+  std::vector<std::vector<std::tuple<int, int,int>>> newBatches;
+  int maxBatchRoutableWorkers = 0;
+  bool stubbornTiles = false;
+  // TODO: revisit following block
+  if(dist_on_ && ripupMode != 1)
+  {
+    int workerBatchIdx = 0;
+    for (auto& workerBatch : workers) {
+      int workersInBatchIdx = 0;
+      for (auto& workersInBatch : workerBatch) {
+        ThreadException exception;
+        #pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < (int) workersInBatch.size(); i++) {
+          try {
+            workersInBatch[i]->distributedMain(getDesign());
+            #pragma omp critical
+            {
+              if (!workersInBatch[i]->isSkipRouting()) {
+                bool addedToBatch = false;
+                for(auto& batch : newBatches)
+                {
+                  bool intersects = false;
+                  for(auto [i1, i2, i3] : batch)
+                  {
+                    auto worker = workers[i1][i2][i3].get();
+                    intersects |= worker->getRouteBox().intersects(workersInBatch[i]->getRouteBox());
+                    if(intersects)
+                      break;
+                  }
+                  if(!intersects)
+                  {
+                    batch.push_back({workerBatchIdx, workersInBatchIdx, i});
+                    addedToBatch = true;
+                    maxBatchRoutableWorkers = std::max(maxBatchRoutableWorkers, (int) batch.size());
+                    break;
+                  }
+                }
+                if(!addedToBatch)
+                {
+                  newBatches.push_back({{workerBatchIdx, workersInBatchIdx, i}});
+                  maxBatchRoutableWorkers = std::max(maxBatchRoutableWorkers, 1);
+                }
+              }
+            }
+          } catch (...) {
+            exception.capture();
+          }
+          exception.rethrow();
         }
+        workersInBatchIdx++;
+      }
+      workerBatchIdx++;
+    }
+    if(maxBatchRoutableWorkers <= 10)
+    {
+      router_->dist_pool_.join();
+      if (version++ == 0 && !design_->hasUpdates()) {
+        std::string serializedViaData;
+        serializeViaData(via_data_, serializedViaData);
+        router_->sendGlobalsUpdates(globals_path_, serializedViaData);
+      } else
+        router_->sendDesignUpdates(globals_path_);
+      logger_->report("New Batches are of size {} with max workers {}", newBatches.size(), maxBatchRoutableWorkers);
+      std::vector<std::vector<std::unique_ptr<FlexDRWorker>>> newWorkers(newBatches.size());
+      int i = 0;
+      for(auto batch : newBatches) {
+        for(auto [i1, i2, i3] : batch)
         {
-          ProfileTask task("DIST: PROCESS_BATCH");
-          // multi thread
-          ThreadException exception;
-          #pragma omp parallel for schedule(dynamic)
+          newWorkers[i].push_back(std::move(workers[i1][i2][i3]));
+        }
+        i++;
+      }
+      int workersInBatchIdx = 0;
+      for(auto& workersInBatch : newWorkers)
+      {
+        workersInBatchIdx++;
+        ThreadException exception;
+        #pragma omp parallel for schedule(dynamic)
+        for (int i = 0; i < (int) workersInBatch.size(); i++) {
+          workersInBatch[i]->distributedMain(getDesign());
+        }
+        distributeStubbornTiles(workersInBatch);
+        {
+          ProfileTask profile("DR:end_batch");
+          // single thread
           for (int i = 0; i < (int) workersInBatch.size(); i++) {
-            try {
-              if (dist_on_)
-                workersInBatch[i]->distributedMain(getDesign());
-              else
-                workersInBatch[i]->main(getDesign());
+            if (!workersInBatch[i]->isSkipRouting())
+              totalNumWorkUnits_++; 
+            if (workersInBatch[i]->end(getDesign()))
+              numWorkUnits_ += 1;
+            if (workersInBatch[i]->isCongested())
+              increaseClipsize_ = true;
+          }
+          workersInBatch.clear();
+        }
+        logger_->report("    Completing {}% with {} violations.",
+                                          (int) (workersInBatchIdx /(float) newWorkers.size() * 100) ,
+                                          getDesign()->getTopBlock()->getNumMarkers());
+        logger_->report("    {}.", t);
+      }
+      stubbornTiles = true;
+    }
+  }
+
+  // parallel execution
+  if (!stubbornTiles)
+  {
+    for (auto& workerBatch : workers) {
+      ProfileTask profile("DR:checkerboard");
+      for (auto& workersInBatch : workerBatch) {
+        int batchRoutableWorkUnits = 0;
+        {
+          const std::string batch_name = std::string("DR:batch<")
+                                        + std::to_string(workersInBatch.size())
+                                        + ">";
+          ProfileTask profile(batch_name.c_str());
+          if (dist_on_) {
+            router_->dist_pool_.join();
+            if (version++ == 0 && !design_->hasUpdates()) {
+              std::string serializedViaData;
+              serializeViaData(via_data_, serializedViaData);
+              router_->sendGlobalsUpdates(globals_path_, serializedViaData);
+            } else
+              router_->sendDesignUpdates(globals_path_);
+          }
+          {
+            ProfileTask task("DIST: PROCESS_BATCH");
+            // multi thread
+            ThreadException exception;
+            #pragma omp parallel for schedule(dynamic)
+            for (int i = 0; i < (int) workersInBatch.size(); i++) {
+              try {
+                if (!dist_on_)
+                  workersInBatch[i]->main(getDesign());
+                else
+                  workersInBatch[i]->distributedMain(getDesign());
                 #pragma omp critical
                 {
                   if(!workersInBatch[i]->isSkipRouting())
@@ -1772,26 +1888,13 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
                     }
                   }
                 }
-            } catch (...) {
-              exception.capture();
-            }
-          }
-          exception.rethrow();
-          if (dist_on_ && batchRoutableWorkUnits > 0) {
-            debugPrint(logger_, utl::DRT, "distributed", 1, "Batch Routable Workers {}",batchRoutableWorkUnits);
-            if(args.ripupMode == 0 && batchRoutableWorkUnits * sweepingStrategies().size() <= router_->getCloudSize() * 95)
-            {
-              //Stubborn Tiles
-              std::vector<std::pair<int, FlexDRWorker*>> routableWorkers;
-              for (int i = 0; i < workersInBatch.size(); i++) {
-                auto worker = workersInBatch.at(i).get();
-                if (!worker->isSkipRouting()) {
-                  routableWorkers.push_back({i, worker});
-                }
+              } catch (...) {
+                exception.capture();
               }
-              distributeStubbornTiles(routableWorkers, workersInBatch);
-
-            } else {
+            }
+            exception.rethrow();
+            debugPrint(logger_, utl::DRT, "distributed", 1, "Batch Routable Workers {}",batchRoutableWorkUnits);
+            if (dist_on_ && batchRoutableWorkUnits > 0) {
               int j = 0;
               std::vector<std::vector<std::pair<int, FlexDRWorker*>>>
                   distWorkerBatches(router_->getCloudSize());
@@ -1824,23 +1927,22 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
             }
           }
         }
-      }
-      {
-        ProfileTask profile("DR:end_batch");
-        // single thread
-        for (int i = 0; i < (int) workersInBatch.size(); i++) {
-          if (!workersInBatch[i]->isSkipRouting())
-            totalNumWorkUnits_++; 
-          if (workersInBatch[i]->end(getDesign()))
-            numWorkUnits_ += 1;
-          if (workersInBatch[i]->isCongested())
-            increaseClipsize_ = true;
+        {
+          ProfileTask profile("DR:end_batch");
+          // single thread
+          for (int i = 0; i < (int) workersInBatch.size(); i++) {
+            if (!workersInBatch[i]->isSkipRouting())
+              totalNumWorkUnits_++; 
+            if (workersInBatch[i]->end(getDesign()))
+              numWorkUnits_ += 1;
+            if (workersInBatch[i]->isCongested())
+              increaseClipsize_ = true;
+          }
+          workersInBatch.clear();
         }
-        workersInBatch.clear();
       }
     }
   }
-
   if (!iter) {
     removeGCell2BoundaryPin();
   }
@@ -1890,77 +1992,258 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
     router_->reportDRC(DRC_RPT_FILE + '-' + std::to_string(iter) + ".rpt",
                        design_->getTopBlock()->getMarkers());
   }
-}
-
-void FlexDR::distributeStubbornTiles(
-          std::vector<std::pair<int, FlexDRWorker*>> routableWorkers, 
-          std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch)
-{
-  //Creating Jobs for each worker in cloud (according to size)
-  int j = 0;
-  int totSz = 0;
-  std::vector<std::vector<std::tuple<int, std::string, SearchRepairArgs>>> distWorkerBatches(router_->getCloudSize());
-  for(auto& [i, worker] : routableWorkers)
+  if(stubbornTiles)
   {
-    std::string workerStr;
-    serializeWorker(worker, workerStr);
-    for(auto args : sweepingStrategies())
+    for(auto ripUpIter : ripUpIterations())
     {
-      distWorkerBatches[j].push_back({i, workerStr, args});
-      j = (j + 1) % router_->getCloudSize();
-      totSz++;
-    }
-  }
-  //Send JOBs
-  for(int i = 0; i < router_->getCloudSize(); i++)
-  {
-    auto& remote_batch = distWorkerBatches.at(i);
-    if (remote_batch.empty())
-      continue;
-    {
-      dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN),
-          result(dst::JobMessage::NONE);
-      std::unique_ptr<dst::JobDescription> desc
-          = std::make_unique<StubbornRoutingJobDescription>();
-      StubbornRoutingJobDescription* rjd
-          = static_cast<StubbornRoutingJobDescription*>(desc.get());
-      rjd->setWorkers(remote_batch);
-      rjd->setReplyPort(router_->local_port_);
-      rjd->setReplyHost(router_->local_ip_);
-      msg.setJobDescription(std::move(desc));
-      bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
-      if (!ok) {
-        logger_->error(utl::DRT, 502, "Sending worker {} failed");
+      if(iter_ <= ripUpIter) {
+        iter_ = ripUpIter;
+        break;
       }
     }
   }
-  //Run Workers Locally
-  high_resolution_clock::time_point t0 = high_resolution_clock::now();
-  long long max_ops = 0;
-  #pragma omp parallel for schedule(dynamic)
-  for(int i = 0; i < routableWorkers.size(); i++)
+}
+
+inline void recordWorker(FlexDRWorker* worker, int markers = -1, int64_t runtime = -1)
+{
+  #ifdef MONGODB
+  mongocxx::client client{mongocxx::uri{}};
+  mongocxx::database mongodb = client["DRT"];
+  #endif
+  std::string workerId;
+  //identifiers
+  auto xMin =  worker->getRouteBox().xMin();
+  auto yMin =  worker->getRouteBox().yMin();
+  auto area = (long) worker->getRouteBox().area();
+  auto iter = worker->getDRIter();
+  auto designName = worker->getDesign()->getTopBlock()->getName();
+
+  if(worker->getParentId().empty() && runtime == -1)
   {
-    routableWorkers[i].second->reloadedMain();
-    #pragma omp critical
-    {
-      max_ops = std::max(max_ops, routableWorkers[i].second->getHeapOps());
+    // TOP WORKER
+    if(!worker->isInitialized())
+      worker->init(worker->getDesign());
+    auto pinCnt = worker->getPinCnt();
+    auto termCnt = worker->getTermCnt();
+    std::map<frLayerNum, std::pair<float, float>> density;
+    worker->calcDensity(density);
+    std::map<frLayerNum, std::map<frConstraintTypeEnum, int>> markers;
+    for (const auto& marker : worker->getMarkers()) {
+      if (marker.getConstraint())
+        markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
+    }
+    #ifdef MONGODB
+    // update mongo db
+    mongocxx::collection coll = mongodb["tree"];
+    auto builder = document{};
+    builder << "design" << designName
+            << "xMin" << xMin 
+            << "yMin" << yMin 
+            << "iter" << iter
+            << "pinCnt" << pinCnt 
+            << "termCnt" << termCnt 
+            << "area" << area;
+    for (frLayerNum lNum = std::max(
+          BOTTOM_ROUTING_LAYER, worker->getDesign()->getTech()->getBottomLayerNum());
+      lNum <= std::min(TOP_ROUTING_LAYER,
+                        worker->getDesign()->getTech()->getTopLayerNum());
+      lNum++) {
+      builder << worker->getDesign()->getTech()->getLayer(lNum)->getName()
+              << open_document
+              << "routeDensity" << density[lNum].first 
+              << "fixedDensity" << density[lNum].second;
+      for (auto [type, num] : markers[lNum]) {
+        std::ostringstream stream;
+        stream << type;
+        std::string str = stream.str();
+        builder << str << num;
+      }
+      builder << close_document;
+    }
+    bsoncxx::document::value doc_value = builder << finalize;
+    for (auto doc : coll.find(doc_value.view())) {
+      workerId = doc["_id"].get_oid().value.to_string();
+    }
+    if (workerId.empty()) {
+      bsoncxx::stdx::optional<mongocxx::result::insert_one> result
+          = coll.insert_one(std::move(doc_value));
+      workerId = result.value().inserted_id().get_oid().value.to_string();
+    }
+    #endif
+  } else {
+    #ifdef MONGODB
+    // update mongo db
+    mongocxx::collection coll = mongodb["tree"];
+    auto builder = document{};
+    builder << "design" << designName
+            << "xMin" << xMin 
+            << "yMin" << yMin 
+            << "iter" << iter
+            << "area" << area;
+    bsoncxx::document::value doc_value = builder << finalize;
+    for (auto doc : coll.find(doc_value.view())) {
+      workerId = doc["_id"].get_oid().value.to_string();
+    }
+    if (workerId.empty()) {
+      // logger_->error(utl::DRT, 1016, "Did not find worker in mongodb");
+    }
+    #endif    
+  }
+  if(runtime == -1)
+    return;
+  #ifdef MONGODB
+  //update document mongodb
+  mongocxx::collection coll = mongodb["tree"];
+  document filter_builder, update_builder;
+  filter_builder << "_id" << bsoncxx::oid(workerId);
+  update_builder << "$push" << open_document << "results" << open_document 
+              << "mazeEndIter" << (int) worker->getMazeEndIter() 
+              << "workerDRCCost" << (int) worker->getDrcCost()
+              << "workerMarkerCost" << (int) worker->getMarkerCost()
+              << "followGuide" << worker->isFollowGuide()
+              << "markers" << markers
+              << "k" << worker->getItrDepth()
+              << "time" << runtime
+              << "parent" << worker->getParentId()
+              << "mazeSearchOps" << (long) worker->getHeapOps()
+              << close_document << close_document;
+  coll.update_one(filter_builder.view(), update_builder.view());
+  #endif
+  
+}
+
+void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
+{
+  worker->incItrDepth();
+  worker->setParentId(worker->getWorkerId());
+  std::string serializedWorker = worker->getSerializedWorker();
+  // Get worker info for ML Model
+  if(!worker->isInitialized())
+    worker->init(getDesign());
+  auto xMin =  worker->getRouteBox().xMin();
+  auto yMin =  worker->getRouteBox().yMin();
+  auto pinCnt = worker->getPinCnt();
+  auto termCnt = worker->getTermCnt();
+  auto area = (long) worker->getRouteBox().area();
+  std::map<frLayerNum, std::pair<float, float>> density;
+  worker->calcDensity(density);
+  std::map<frLayerNum, std::map<frConstraintTypeEnum, int>> markers;
+  for (const auto& marker : worker->getMarkers()) {
+    if (marker.getConstraint())
+      markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
+  }
+  // Run XGBRanker to get best combinations
+  std::vector<SearchRepairArgs> args;
+  #ifdef MONGODB
+  Py_Initialize();
+  bp::object sys_module = bp::import("sys"); 
+  sys_module.attr("path").attr("insert")(1, dist_dir_);
+  auto pyModule = bp::import("xgbranker");
+  bp::dict workerDict;
+  workerDict["xMin"] = xMin;
+  workerDict["yMin"] = yMin;
+  workerDict["pinCnt"] = pinCnt;
+  workerDict["termCnt"] = termCnt;
+  workerDict["area"] = area;
+  for (frLayerNum lNum = std::max(BOTTOM_ROUTING_LAYER, getDesign()->getTech()->getBottomLayerNum()); lNum <= std::min(TOP_ROUTING_LAYER, getDesign()->getTech()->getTopLayerNum()); lNum++) {
+    auto lName = getDesign()->getTech()->getLayer(lNum)->getName();
+    workerDict[fmt::format("{}_routeDensity", lName)] = density[lNum].first;
+    workerDict[fmt::format("{}_fixedDensity", lName)] = density[lNum].second;
+    for (auto [type, num] : markers[lNum]) {
+      std::ostringstream stream;
+      stream << type;
+      std::string str = stream.str();
+      workerDict[fmt::format("{}_{}", lName, str)] = num;
     }
   }
-  high_resolution_clock::time_point t1 = high_resolution_clock::now();
-  seconds time_span = duration_cast<seconds>(t1 - t0);
-
-  //Send TIMEOUT
+  bp::list resultsArgs = bp::call_method<bp::list>(pyModule.ptr(), "getBestParams", workerDict);
+  for(int i = 0; i < bp::len(resultsArgs); i++)
   {
-    if(router_->getWorkerResultsSize() != totSz)
-      sleep((int) (0.1 * time_span.count()));
-    auto desc = std::make_unique<TimeOutDescription>();
-    desc->setMaxOps(max_ops);
-    dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
-    msg.setJobDescription(std::move(desc));
-    dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+    bp::dict dict = bp::extract<bp::dict>(resultsArgs[i]);
+    SearchRepairArgs arg;
+    arg.followGuide = bp::extract<bool>(dict["followGuide"]);
+    arg.mazeEndIter = bp::extract<int>(dict["mazeEndIter"]);
+    arg.workerDRCCost = bp::extract<int>(dict["workerDRCCost"]);
+    arg.workerMarkerCost = bp::extract<int>(dict["workerMarkerCost"]);
+    arg.ripupMode = 0;
+    args.push_back(arg);
   }
+  #endif
+  // Send Worker With Args
+  dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN), result(dst::JobMessage::NONE);
+  std::unique_ptr<dst::JobDescription> desc
+      = std::make_unique<StubbornRoutingJobDescription>();
+  StubbornRoutingJobDescription* rjd
+      = static_cast<StubbornRoutingJobDescription*>(desc.get());
+  rjd->setWorker(serializedWorker);
+  rjd->setWorkerId(workerId);
+  rjd->setArgs(args);
+  rjd->setReplyPort(router_->local_port_);
+  rjd->setReplyHost(router_->local_ip_);
+  msg.setJobDescription(std::move(desc));
+  bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+  if (!ok) {
+    logger_->error(utl::DRT, 502, "Sending worker {} failed");
+  }
+
+}
+
+void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch)
+{
+  //Creating Jobs for each worker in cloud (according to size)
+  int k = 3;
+  int totSz = 0;
+  int workerId = 0;
+  for(auto& worker: workersInBatch)
+  {
+    if(worker->isSkipRouting()) {
+      workerId++;
+      continue;
+    }
+    worker->setIdInBatch(workerId);
+    // stupid I know. to be fixed later.
+    {
+      auto copyWorker = FlexDRWorker::load(worker->getSerializedWorker(), logger_, design_, nullptr);
+      recordWorker(copyWorker.get());
+    }
+    {
+      auto copyWorker = FlexDRWorker::load(worker->getSerializedWorker(), logger_, design_, nullptr);
+      expandWorker(workerId, copyWorker.get());
+    }
+    totSz += 10;
+    workerId++;
+  }
+  //Run Workers Locally
+  asio::thread_pool pool(1);
+  asio::post(pool, [this, k, &workersInBatch](){
+    long long max_ops = 0;
+    #pragma omp parallel for schedule(dynamic)
+    for(int i = 0; i < workersInBatch.size(); i++)
+    {
+      if(workersInBatch[i]->isSkipRouting())
+        continue;
+      high_resolution_clock::time_point t0 = high_resolution_clock::now();
+      workersInBatch[i]->reloadedMain();
+      high_resolution_clock::time_point t1 = high_resolution_clock::now();
+      seconds time_span = duration_cast<seconds>(t1 - t0);
+      recordWorker(workersInBatch[i].get(), workersInBatch[i]->getBestNumMarkers(), time_span.count());
+      #pragma omp critical
+      {
+        max_ops = std::max(max_ops, workersInBatch[i]->getHeapOps());
+      }
+    }
+    max_ops *= k;
+    //Send TIMEOUT
+    {
+      auto desc = std::make_unique<TimeOutDescription>();
+      desc->setMaxOps(max_ops);
+      dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+      msg.setJobDescription(std::move(desc));
+      dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+    }
+  });
   //Wait For Results
-  std::map<int, WorkerResult> resultMap;
+  std::map<int, std::vector<WorkerResult>> resultMap;
   while(totSz)
   {
     std::vector<WorkerResult> results;
@@ -1972,49 +2255,66 @@ void FlexDR::distributeStubbornTiles(
     totSz -= results.size();
     for(auto result : results)
     {
-      if (resultMap.find(result.id) == resultMap.end() ||
-          result < resultMap[result.id])
+      resultMap[result.id].push_back(result);
+      auto resWorker = FlexDRWorker::load(result.workerStr, logger_, design_, nullptr);
+      recordWorker(resWorker.get(), result.numOfViolations, result.runTime);
+      if (result.numOfViolations == 0)
       {
-        resultMap[result.id] = result;
+        //Send TIMEOUT
+        {
+          auto desc = std::make_unique<TimeOutDescription>();
+          desc->setBannedId(result.id);
+          desc->setMaxOps(-2);
+          dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+          msg.setJobDescription(std::move(desc));
+          dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+        }
+        // Found a result with 0 violations
+        deserializeWorker(workersInBatch.at(result.id).get(), design_, result.workerStr); 
+      } else
+      { 
+        if(resWorker->getBestNumMarkers() < resWorker->getInitNumMarkers() && resWorker->getItrDepth() < k)
+        {
+          // We can expand more
+          auto resWorker2 = FlexDRWorker::load(result.workerStr, logger_, design_, nullptr);
+          expandWorker(result.id, resWorker2.get());
+          if (resWorker2->getItrDepth() == k)
+            totSz += 5;
+          else
+            totSz += 10;
+        }
       }
     }
   }
+  pool.join();
   //Choose Best Result
-  for(auto& [idx, worker] : routableWorkers)
+  for(auto& [id, results] : resultMap)
   {
-    if(resultMap.find(idx) != resultMap.end() && resultMap[idx].numOfViolations >= worker->getBestNumMarkers())
+    WorkerResult bestResult;
+    bestResult.numOfViolations = std::numeric_limits<int>::max();
+    for(auto& result : results)
     {
-      resultMap.erase(idx);
+      if(result.numOfViolations == -1)
+        continue;
+      if(result.numOfViolations < bestResult.numOfViolations)
+        bestResult = result;
+      else if(result.numOfViolations == bestResult.numOfViolations && result.heapOps < bestResult.heapOps)
+        bestResult = result;
+    }
+    if(bestResult.numOfViolations < workersInBatch.at(id)->getBestNumMarkers())
+    {
+      deserializeWorker(workersInBatch.at(id).get(), design_, bestResult.workerStr);
     }
   }
-  //Fetch Best Results
-  for(auto& [idx, bestResult] : resultMap)
+  resultMap.clear();
+  //clear TIMEOUT
   {
-    debugPrint(logger_, utl::DRT, "distributed", 1, "Found remote result with {} markers better than {}", bestResult.numOfViolations, workersInBatch.at(idx)->getBestNumMarkers());
-    dst::JobMessage msg(dst::JobMessage::FETCH_ROUTING_RESULT, dst::JobMessage::BROADCAST), dummy;
-    auto desc = std::make_unique<RoutingResultDescription>();
-    desc->setReplyPort(router_->local_port_);
-    desc->setReplyHost(router_->local_ip_);
-    desc->setResult(bestResult);
+    auto desc = std::make_unique<TimeOutDescription>();
+    desc->setMaxOps(-1);
+    dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
     msg.setJobDescription(std::move(desc));
-    dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, dummy);
+    dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   }
-  
-  while(!resultMap.empty())
-  {
-    std::vector<WorkerResult> results;
-    if(!router_->getWorkerResults(results))
-    {
-      sleep(1);
-      continue;
-    }
-    for(auto result : results)
-    {
-      deserializeWorker(workersInBatch.at(result.id).get(), design_, result.workerStr);
-      resultMap.erase(result.id);
-    }
-  }
-  
 }
 void FlexDR::end(bool done)
 {
@@ -2372,7 +2672,9 @@ int FlexDR::main()
   {
     dist_->runWorker(router_->local_ip_.c_str(), router_->local_port_, true);
   }
-  for (auto args : strategy()) {
+  auto strategies = strategy();
+  while(iter_ < strategies.size()) {
+    auto args = strategies[iter_];
     if (iter_ < 3)
       FIXEDSHAPECOST = ROUTESHAPECOST;
     else if (iter_ < 10)
@@ -2524,6 +2826,11 @@ void FlexDRWorker::serialize(Archive& ar, const unsigned int version)
   (ar) & markers_;
   (ar) & bestMarkers_;
   (ar) & isCongested_;
+  (ar) & heap_ops_;
+  (ar) & itr_depth_;
+  (ar) & worker_id_;
+  (ar) & parent_id_;
+  (ar) & id_in_batch_;
   if (is_loading(ar)) {
     // boundaryPin_
     int sz;

@@ -61,33 +61,14 @@
 #include "distributed/WorkerResult.h"
 #include "dst/BroadcastJobDescription.h"
 #include "distributed/TimeOutDescription.h"
-#include <Python.h>
-#include <boost/python.hpp>
-
-#ifdef MONGODB
-#include <bsoncxx/json.hpp>
-#include <mongocxx/client.hpp>
-#include <mongocxx/stdx.hpp>
-#include <mongocxx/uri.hpp>
-#include <mongocxx/instance.hpp>
-#include <bsoncxx/builder/stream/helpers.hpp>
-#include <bsoncxx/builder/stream/document.hpp>
-#include <bsoncxx/builder/stream/array.hpp>
-
-using bsoncxx::builder::stream::close_array;
-using bsoncxx::builder::stream::close_document;
-using bsoncxx::builder::stream::document;
-using bsoncxx::builder::stream::finalize;
-using bsoncxx::builder::stream::open_array;
-using bsoncxx::builder::stream::open_document;
-mongocxx::instance instance{};
-#endif
+#include "mongo.h"
 namespace fs = std::filesystem;
 using namespace std;
 using namespace fr;
 using namespace triton_route;
-using namespace boost::python;
-
+#ifdef MONGODB
+mongocxx::instance instance{};
+#endif
 namespace sta {
 // Tcl files encoded into strings.
 extern const char* drt_tcl_inits[];
@@ -106,14 +87,6 @@ TritonRoute::TritonRoute()
       results_sz_(0),
       dist_pool_(1)
 {
-  // Py_Initialize();
-  // object sys_module = import("sys"); 
-  // str module_directory = "/home/osama/Desktop/OpenROAD-new/build/";
-  // sys_module.attr("path").attr("insert")(1, module_directory);
-  // auto pyModule = import("testpy");
-  // boost::python::dict mmap;
-  // mmap["Key"] = 21;
-  // std::cout << call_method<int>(pyModule.ptr(), "getInteger", 3, mmap) << std::endl;
 }
 
 TritonRoute::~TritonRoute()

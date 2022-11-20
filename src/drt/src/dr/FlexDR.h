@@ -195,8 +195,8 @@ class FlexDR
       const std::vector<std::pair<int, FlexDRWorker*>>& remote_batch,
       std::vector<std::unique_ptr<FlexDRWorker>>& batch);
   
-  void distributeStubbornTiles(std::vector<std::pair<int, FlexDRWorker*>> routableWorkers, 
-                               std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch);
+  void distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch);
+  void expandWorker(int workerId, FlexDRWorker* worker);
 
   void reportGuideCoverage();
  private:
@@ -336,7 +336,8 @@ class FlexDRWorker
  public:
   // constructors
   FlexDRWorker(FlexDRViaData* via_data, frDesign* design, Logger* logger)
-      : design_(design),
+      : router_(nullptr),
+        design_(design),
         logger_(logger),
         graphics_(nullptr),
         via_data_(via_data),
@@ -370,12 +371,56 @@ class FlexDRWorker
         isCongested_(false),
         save_updates_(false),
         heap_ops_(0),
-        connections_(0),
-        begin_(true)
+        itr_depth_(0),
+        initialized_(false),
+        id_in_batch_(-1)
+  {
+  }
+  FlexDRWorker(const FlexDRWorker& rhs)
+      : router_(rhs.router_),
+        design_(rhs.design_),
+        logger_(rhs.logger_),
+        graphics_(rhs.graphics_),
+        debugSettings_(rhs.debugSettings_),
+        via_data_(rhs.via_data_),
+        routeBox_(rhs.routeBox_),
+        extBox_(rhs.extBox_),
+        drcBox_(rhs.drcBox_),
+        drIter_(rhs.drIter_),
+        mazeEndIter_(rhs.mazeEndIter_),
+        followGuide_(rhs.followGuide_),
+        needRecheck_(rhs.needRecheck_),
+        skipRouting_(rhs.skipRouting_),
+        ripupMode_(rhs.ripupMode_),
+        workerDRCCost_(rhs.workerDRCCost_),
+        workerMarkerCost_(rhs.workerMarkerCost_),
+        boundaryPin_(rhs.boundaryPin_),
+        pinCnt_(rhs.pinCnt_),
+        termCnt_(rhs.termCnt_),
+        initNumMarkers_(rhs.initNumMarkers_),
+        apSVia_(rhs.apSVia_),
+        planarHistoryMarkers_(rhs.planarHistoryMarkers_),
+        viaHistoryMarkers_(rhs.viaHistoryMarkers_),
+        historyMarkers_(rhs.historyMarkers_),
+        nets_(),
+        owner2nets_(),
+        gridGraph_(design_->getTech(), this),
+        markers_(rhs.markers_),
+        rq_(this),
+        gcWorker_(nullptr),
+        dist_port_(rhs.dist_port_),
+        dist_on_(rhs.dist_on_),
+        isCongested_(rhs.isCongested_),
+        save_updates_(rhs.save_updates_),
+        heap_ops_(rhs.heap_ops_),
+        itr_depth_(rhs.itr_depth_),
+        initialized_(rhs.initialized_),
+        id_in_batch_(rhs.id_in_batch_)
   {
   }
   FlexDRWorker()
       :  // for serialization
+        router_(nullptr),
         logger_(nullptr),
         graphics_(nullptr),
         debugSettings_(nullptr),
@@ -388,8 +433,9 @@ class FlexDRWorker
         isCongested_(false),
         save_updates_(false),
         heap_ops_(0),
-        connections_(0),
-        begin_(true)
+        itr_depth_(0),
+        initialized_(false),
+        id_in_batch_(-1)
   {
   }
   // setters
@@ -466,6 +512,12 @@ class FlexDRWorker
     gridGraph_.setGraphics(in);
   }
   void setViaData(FlexDRViaData* viaData) { via_data_ = viaData; }
+  void setItrDepth(int value) { itr_depth_ = value; }
+  void incItrDepth() { itr_depth_++; }
+  void setWorkerId(const std::string& id) { worker_id_ = id; }
+  void setParentId(const std::string& id) { parent_id_ = id; }
+  void setIdInBatch(const int id) { id_in_batch_ = id; }
+  void setRouter(triton_route::TritonRoute* router) { router_ = router; }
   // getters
   frTechObject* getTech() const { return design_->getTech(); }
   void getRouteBox(Rect& boxIn) const { boxIn = routeBox_; }
@@ -509,6 +561,10 @@ class FlexDRWorker
   const FlexGridGraph& getGridGraph() const { return gridGraph_; }
   int getMarkerCost() const { return workerMarkerCost_; }
   int getDrcCost() const { return workerDRCCost_; }
+  int getItrDepth() const { return itr_depth_; }
+  std::string getWorkerId() const { return worker_id_; }
+  std::string getParentId() const { return parent_id_; }
+  bool isInitialized() const { return initialized_; }
   // others
   int main(frDesign* design);
   void distributedMain(frDesign* design);
@@ -556,9 +612,7 @@ class FlexDRWorker
     setBlocked
   };
   void incHeapOps() { ++heap_ops_; }
-  void incConnections() { ++connections_; }
   long long getHeapOps() const { return heap_ops_; }
-  int getConnections() const { return connections_; }
   int getPinCnt() const { return pinCnt_; }
   int getTermCnt() const { return termCnt_; }
   void init(const frDesign* design);
@@ -569,6 +623,7 @@ class FlexDRWorker
     int numReroute;
     bool doRoute;
   } RouteQueueEntry;
+  triton_route::TritonRoute* router_;
   frDesign* design_;
   Logger* logger_;
   FlexDRGraphics* graphics_;  // owned by FlexDR
@@ -620,8 +675,11 @@ class FlexDRWorker
   bool isCongested_;
   bool save_updates_;
   long long heap_ops_;
-  int connections_;
-  bool begin_;
+  int itr_depth_;
+  std::string worker_id_;
+  std::string parent_id_;
+  bool initialized_;
+  int id_in_batch_;
   // init
   
   void initNets(const frDesign* design);
@@ -1086,6 +1144,7 @@ class FlexDRWorker
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version);
   friend class boost::serialization::access;
+  friend class FlexGridGraph;
 };
 }  // namespace fr
 

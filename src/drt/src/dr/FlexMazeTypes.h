@@ -36,6 +36,7 @@ class FlexMazeIdx
 {
  public:
   FlexMazeIdx() : xIdx_(-1), yIdx_(-1), zIdx_(-1) {}
+  FlexMazeIdx(const FlexMazeIdx& rhs) : xIdx_(rhs.xIdx_), yIdx_(rhs.yIdx_), zIdx_(rhs.zIdx_) {}
   FlexMazeIdx(frMIdx xIn, frMIdx yIn, frMIdx zIn)
       : xIdx_(xIn), yIdx_(yIn), zIdx_(zIn)
   {
