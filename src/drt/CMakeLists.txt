@@ -234,6 +234,8 @@ if (Boost_unit_test_framework_FOUND)
 endif()
 
 add_test(NAME trTest COMMAND trTest)
+target_link_libraries(drt PRIVATE "stdc++fs")
+
 ############################################################
 # VTune ITT API
 ############################################################
