@@ -221,8 +221,10 @@ void LoadBalancer::lookUpWorkers(const char* domain, unsigned short port)
                  workers_set.size());
     }
 
-    for (auto worker : new_workers)
+    for (auto worker : new_workers) {
+      logger_->report("New Worker added to load balaner {}/{}", worker.ip.to_string(), worker.port);
       addWorker(worker.ip.to_string(), worker.port);
+    }
 
     boost::this_thread::sleep(
         boost::posix_time::milliseconds(workers_discovery_period * 1000));

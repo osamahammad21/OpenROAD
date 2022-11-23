@@ -1786,13 +1786,6 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
     }
     if(maxBatchRoutableWorkers <= 10)
     {
-      router_->dist_pool_.join();
-      if (version++ == 0 && !design_->hasUpdates()) {
-        std::string serializedViaData;
-        serializeViaData(via_data_, serializedViaData);
-        router_->sendGlobalsUpdates(globals_path_, serializedViaData);
-      } else
-        router_->sendDesignUpdates(globals_path_);
       logger_->report("New Batches are of size {} with max workers {}", newBatches.size(), maxBatchRoutableWorkers);
       std::vector<std::vector<std::unique_ptr<FlexDRWorker>>> newWorkers(newBatches.size());
       int i = 0;
@@ -1806,6 +1799,13 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
       int workersInBatchIdx = 0;
       for(auto& workersInBatch : newWorkers)
       {
+        router_->dist_pool_.join();
+        if (version++ == 0 && !design_->hasUpdates()) {
+          std::string serializedViaData;
+          serializeViaData(via_data_, serializedViaData);
+          router_->sendGlobalsUpdates(globals_path_, serializedViaData);
+        } else
+          router_->sendDesignUpdates(globals_path_);
         workersInBatchIdx++;
         ThreadException exception;
         #pragma omp parallel for schedule(dynamic)
@@ -2156,7 +2156,7 @@ void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
       workerDict[fmt::format("{}_{}", lName, str)] = num;
     }
   }
-  bp::list resultsArgs = bp::call_method<bp::list>(pyModule.ptr(), "getBestParams", workerDict);
+  bp::list resultsArgs = bp::call_method<bp::list>(pyModule.ptr(), "getBestParams", workerDict, worker->getItrDepth()>=3 ? 5 : 10);
   for(int i = 0; i < bp::len(resultsArgs); i++)
   {
     bp::dict dict = bp::extract<bp::dict>(resultsArgs[i]);
@@ -2196,11 +2196,13 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
   int workerId = 0;
   for(auto& worker: workersInBatch)
   {
+    worker->setIdInBatch(workerId);
+    worker->setRouter(router_);
     if(worker->isSkipRouting()) {
       workerId++;
       continue;
     }
-    worker->setIdInBatch(workerId);
+
     // stupid I know. to be fixed later.
     {
       auto copyWorker = FlexDRWorker::load(worker->getSerializedWorker(), logger_, design_, nullptr);
@@ -2226,15 +2228,24 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
       workersInBatch[i]->reloadedMain();
       high_resolution_clock::time_point t1 = high_resolution_clock::now();
       seconds time_span = duration_cast<seconds>(t1 - t0);
-      recordWorker(workersInBatch[i].get(), workersInBatch[i]->getBestNumMarkers(), time_span.count());
-      #pragma omp critical
-      {
-        max_ops = std::max(max_ops, workersInBatch[i]->getHeapOps());
+      int bestMarkers = 0;
+      if (router_->isWorkerBanned(i))
+        bestMarkers = -1;
+      else
+        bestMarkers = workersInBatch[i]->getBestNumMarkers();
+      recordWorker(workersInBatch[i].get(), bestMarkers, time_span.count());
+      if (bestMarkers != -1) {
+        #pragma omp critical
+        {
+          max_ops = std::max(max_ops, workersInBatch[i]->getHeapOps());
+        }
       }
     }
     max_ops *= k;
-    //Send TIMEOUT
-    {
+    if(max_ops == 0)
+      logger_->warn(utl::DRT, 3410, "Max Ops 0");
+    else {
+      //Send TIMEOUT
       auto desc = std::make_unique<TimeOutDescription>();
       desc->setMaxOps(max_ops);
       dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
@@ -2262,18 +2273,19 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
       {
         //Send TIMEOUT
         {
-          auto desc = std::make_unique<TimeOutDescription>();
-          desc->setBannedId(result.id);
-          desc->setMaxOps(-2);
-          dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
-          msg.setJobDescription(std::move(desc));
-          dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+          // auto desc = std::make_unique<TimeOutDescription>();
+          // desc->setBannedId(result.id);
+          // desc->setMaxOps(-2);
+          // dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+          // msg.setJobDescription(std::move(desc));
+          // dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
         }
         // Found a result with 0 violations
-        deserializeWorker(workersInBatch.at(result.id).get(), design_, result.workerStr); 
+        // stop the local worker
+        // router_->banWorker(result.id);
       } else
-      { 
-        if(resWorker->getBestNumMarkers() < resWorker->getInitNumMarkers() && resWorker->getItrDepth() < k)
+      {
+        if(result.numOfViolations != -1 && result.numOfViolations < workersInBatch.at(result.id)->getInitNumMarkers() && resWorker->getItrDepth() < k)
         {
           // We can expand more
           auto resWorker2 = FlexDRWorker::load(result.workerStr, logger_, design_, nullptr);
@@ -2301,7 +2313,7 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
       else if(result.numOfViolations == bestResult.numOfViolations && result.heapOps < bestResult.heapOps)
         bestResult = result;
     }
-    if(bestResult.numOfViolations < workersInBatch.at(id)->getBestNumMarkers())
+    if(router_->isWorkerBanned(id) || bestResult.numOfViolations < workersInBatch.at(id)->getBestNumMarkers())
     {
       deserializeWorker(workersInBatch.at(id).get(), design_, bestResult.workerStr);
     }
@@ -2315,6 +2327,7 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
     msg.setJobDescription(std::move(desc));
     dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
   }
+  router_->clearBannerWorkers();
 }
 void FlexDR::end(bool done)
 {

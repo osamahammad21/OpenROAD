@@ -312,7 +312,7 @@ class RoutingCallBack : public dst::JobCallBack
     if ((desc->isDesignUpdate() && !desc->getUpdates().empty())
         || desc->getDesignPath() != "") {
       frTime t;
-      logger_->report("Design Update");
+      logger_->report("Design Update {}", desc->isDesignUpdate());
       if (desc->isDesignUpdate())
         if(desc->getUpdates().size() == 1)
           router_->updateDesign(desc->getUpdates()[0]);
