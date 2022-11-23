@@ -3459,11 +3459,6 @@ void FlexDRWorker::init(const frDesign* design)
     markers_ = bestMarkers_;
     bestMarkers_.clear();
     setInitNumMarkers(getNumMarkers());
-    for(auto& net : nets_)
-    {
-      net->updateRouteConnFigs();
-      owner2nets_[net->getFrNet()].push_back(net.get());
-    }
     initNets_regionQuery();
   }
   initGridGraph(design);

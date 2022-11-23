@@ -595,10 +595,12 @@ void FlexDRWorker::cleanup()
   viaHistoryMarkers_.clear();
   historyMarkers_.clear();
   historyMarkers_.shrink_to_fit();
-  for (auto& net : getNets()) {
-    net->cleanup();
+  if(getItrDepth() == 0) {
+    for (auto& net : getNets()) {
+      net->cleanup();
+    }
+    owner2nets_.clear();
   }
-  owner2nets_.clear();
   gridGraph_.cleanup();
   markers_.clear();
   markers_.shrink_to_fit();
