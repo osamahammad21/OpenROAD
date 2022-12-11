@@ -1216,10 +1216,17 @@ void TritonRoute::checkDRC(const char* filename, int x1, int y1, int x2, int y2)
   gcWorker->main();
   logger_->info(
       utl::DRT, 614, "Found {} violations", gcWorker->getMarkers().size());
-  frList<std::unique_ptr<frMarker>> markers;
-  for (auto& marker : gcWorker->getMarkers())
-    markers.push_back(std::make_unique<frMarker>(*marker));
-  reportDRC(filename, markers, box);
+  // frList<std::unique_ptr<frMarker>> markers;
+  auto regionQuery = design_->getRegionQuery();
+  auto topBlock = design_->getTopBlock();
+  for (auto& marker : gcWorker->getMarkers()) {
+    auto uptr = make_unique<frMarker>(*marker);
+    auto ptr = uptr.get();
+    regionQuery->addMarker(ptr);
+    topBlock->addMarker(std::move(uptr));
+  }
+    // markers.push_back(std::make_unique<frMarker>(*marker));
+  reportDRC(filename, design_->getTopBlock()->getMarkers(), box);
 }
 
 void TritonRoute::readParams(const string& fileName)

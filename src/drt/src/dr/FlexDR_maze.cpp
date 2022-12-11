@@ -1596,7 +1596,7 @@ void FlexDRWorker::route_queue()
 
   // route
   route_queue_main(rerouteQueue);
-  if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
+  if(TIMEOUT_REACHED || (MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
     return;
   // end
   gcWorker_->resetTargetNet();
@@ -1770,7 +1770,7 @@ void FlexDRWorker::route_queue_main(queue<RouteQueueEntry>& rerouteQueue)
       // route
       mazeNetInit(net);
       bool isRouted = routeNet(net);
-      if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
+      if(TIMEOUT_REACHED || (MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
         return;
       if (isRouted == false) {
         if (OUT_MAZE_FILE == string("")) {
@@ -2904,7 +2904,7 @@ bool FlexDRWorker::routeNet(drNet* net)
   bool isFirstConn = true;
   bool searchSuccess = true;
   while (!unConnPins.empty()) {
-    if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
+    if(TIMEOUT_REACHED || (MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
     {
       searchSuccess = false;
       break;
@@ -2929,7 +2929,7 @@ bool FlexDRWorker::routeNet(drNet* net)
       isFirstConn = false;
     } else {
       searchSuccess = false;
-      if((MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
+      if(TIMEOUT_REACHED || (MAX_OPS != -1 && getHeapOps() > MAX_OPS) || (router_ && router_->isWorkerBanned(id_in_batch_)))
         break;
       logger_->report("Failed to find a path between pin " + nextPin->getName()
                       + " and source aps:");

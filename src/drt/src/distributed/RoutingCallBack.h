@@ -68,18 +68,30 @@ class RoutingCallBack : public dst::JobCallBack
                   utl::Logger* logger)
       : router_(router), dist_(dist), logger_(logger), init_(true), busy_(false)
   {
-    routing_pool_ = std::make_unique<asio::thread_pool>(ord::OpenRoad::openRoad()->getThreadCount());
   }
 
   void onTimeOut(dst::JobMessage& msg, dst::socket& sock) override
   {
     TimeOutDescription* desc = static_cast<TimeOutDescription*>(msg.getJobDescription());
-    if(MAX_OPS != -2)
-      MAX_OPS = desc->getMaxOps();
+    switch(desc->getMaxOps())
+    {
+      case -3:
+        TIMEOUT_REACHED = true;
+        break;
+      case -2:
+        //nop
+      break;
+      case -1:
+        MAX_OPS = -1;
+        router_->clearBannerWorkers();
+        TIMEOUT_REACHED = false;
+      break;
+      default:
+        MAX_OPS = desc->getMaxOps();
+      break;
+    }
     if(desc->getBannedId() != -1)
       router_->banWorker(desc->getBannedId());
-    if(MAX_OPS == -1)
-      router_->clearBannerWorkers();
     dst::JobMessage result(dst::JobMessage::SUCCESS);
     dist_->sendResult(result, sock);
     sock.close();
@@ -131,6 +143,11 @@ class RoutingCallBack : public dst::JobCallBack
 
   void handleInitialRoutingJob(dst::JobMessage& msg, dst::socket& sock)
   {
+    if(routing_pool_ != nullptr)
+    {
+      routing_pool_->join();
+      routing_pool_.reset();
+    }
     RoutingJobDescription* desc
         = static_cast<RoutingJobDescription*>(msg.getJobDescription());
     omp_set_num_threads(ord::OpenRoad::openRoad()->getThreadCount());
@@ -244,14 +261,19 @@ class RoutingCallBack : public dst::JobCallBack
     worker->setRipupMode(args.ripupMode);
     worker->setFollowGuide(args.followGuide);
     worker->setWorkerId(fmt::format("{}_{}_{}_{}", args.mazeEndIter, args.workerDRCCost, args.workerMarkerCost, args.followGuide));
+    if(!worker->getParentId().empty())
+      worker->setWorkerId(fmt::format("{}/{}", worker->getParentId(), worker->getWorkerId()));
     worker->setRouter(router_);
     high_resolution_clock::time_point t0 = high_resolution_clock::now();
-    worker->reloadedMain();
+    if(TIMEOUT_REACHED || (MAX_OPS != -1 && worker->getHeapOps() > MAX_OPS) || router_->isWorkerBanned(workerId)) {
+      //timedout nop
+    }else
+      worker->reloadedMain();
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     seconds time_span = duration_cast<seconds>(t1 - t0);
     WorkerResult result;
     result.id = workerId;
-    if((MAX_OPS != -1 && worker->getHeapOps() > MAX_OPS) || router_->isWorkerBanned(workerId))
+    if(TIMEOUT_REACHED || (MAX_OPS != -1 && worker->getHeapOps() > MAX_OPS) || router_->isWorkerBanned(workerId))
       result.numOfViolations = -1;
     else
       result.numOfViolations = worker->getBestNumMarkers();
@@ -277,6 +299,10 @@ class RoutingCallBack : public dst::JobCallBack
   }
   void handleStubbornTilesJob(dst::JobMessage& msg, dst::socket& sock)
   {
+    if(routing_pool_ == nullptr)
+    {
+      routing_pool_ = std::make_unique<asio::thread_pool>(ord::OpenRoad::openRoad()->getThreadCount());
+    }
     {
       dst::JobMessage result(dst::JobMessage::NONE);
       dist_->sendResult(result, sock);

@@ -44,7 +44,11 @@
 #include "dst/JobMessage.h"
 #include "frDesign.h"
 #include "gc/FlexGC.h"
-
+#ifdef MONGODB
+#include <Python.h>
+#include <boost/python.hpp>
+namespace bp = boost::python;
+#endif
 using Rectangle = boost::polygon::rectangle_data<int>;
 namespace dst {
 class Distributed;
@@ -196,7 +200,9 @@ class FlexDR
       std::vector<std::unique_ptr<FlexDRWorker>>& batch);
   
   void distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch);
-  void expandWorker(int workerId, FlexDRWorker* worker);
+  void expandWorker(int workerId, const std::string workerStr);
+  void recordWorker(std::string workerStr, int markers = -1, int64_t runtime = -1);
+
 
   void reportGuideCoverage();
  private:
@@ -226,6 +232,12 @@ class FlexDR
   float clipSizeInc_;
   int iter_;
   double dr_runtime_;
+  #ifdef MONGODB
+  bp::object pyRanker_;
+  #endif
+  int expand_time_;
+  int python_time_;
+  int record_time_;
 
   // others
   void initFromTA();

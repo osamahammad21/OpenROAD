@@ -59,11 +59,8 @@
 #include "serialization.h"
 #include "utl/exception.h"
 #include "mongo.h"
-#ifdef MONGODB
-#include <Python.h>
-#include <boost/python.hpp>
-namespace bp = boost::python;
-#endif
+#include <boost/bind/bind.hpp>
+
 using namespace std;
 using namespace fr;
 using namespace std::chrono;
@@ -130,7 +127,10 @@ FlexDR::FlexDR(triton_route::TritonRoute* router,
       increaseClipsize_(false),
       clipSizeInc_(0),
       iter_(0),
-      dr_runtime_(0.0)
+      dr_runtime_(0.0),
+      expand_time_(0),
+      python_time_(0),
+      record_time_(0)
 {
 }
 
@@ -1997,15 +1997,20 @@ void FlexDR::searchRepair(const SearchRepairArgs& args)
     for(auto ripUpIter : ripUpIterations())
     {
       if(iter_ <= ripUpIter) {
-        iter_ = ripUpIter;
+        if(iter_ + 3 < ripUpIter)
+          iter_ = iter_ + 3;
+        else
+          iter_ = ripUpIter;
         break;
       }
     }
   }
 }
 
-inline void recordWorker(FlexDRWorker* worker, int markers = -1, int64_t runtime = -1)
+void FlexDR::recordWorker(std::string workerStr, int markers, int64_t runtime)
 {
+  high_resolution_clock::time_point t0 = high_resolution_clock::now();
+  auto worker = FlexDRWorker::load(workerStr, logger_, design_, nullptr);
   #ifdef MONGODB
   mongocxx::client client{mongocxx::uri{}};
   mongocxx::database mongodb = client["DRT"];
@@ -2042,7 +2047,10 @@ inline void recordWorker(FlexDRWorker* worker, int markers = -1, int64_t runtime
             << "iter" << iter
             << "pinCnt" << pinCnt 
             << "termCnt" << termCnt 
-            << "area" << area;
+            << "area" << area
+            << "ROUTESHAPECOST" << (int) ROUTESHAPECOST
+            << "MARKERCOST" << (int) MARKERCOST
+            ;
     for (frLayerNum lNum = std::max(
           BOTTOM_ROUTING_LAYER, worker->getDesign()->getTech()->getBottomLayerNum());
       lNum <= std::min(TOP_ROUTING_LAYER,
@@ -2105,15 +2113,19 @@ inline void recordWorker(FlexDRWorker* worker, int markers = -1, int64_t runtime
               << "k" << worker->getItrDepth()
               << "time" << runtime
               << "parent" << worker->getParentId()
+              << "id" << worker->getWorkerId()
               << "mazeSearchOps" << (long) worker->getHeapOps()
               << close_document << close_document;
   coll.update_one(filter_builder.view(), update_builder.view());
   #endif
-  
+  high_resolution_clock::time_point t1 = high_resolution_clock::now();
+  record_time_ += duration_cast<seconds>(t1 - t0).count();
 }
 
-void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
+void FlexDR::expandWorker(int id_in_batch, const std::string workerStr)
 {
+  high_resolution_clock::time_point t0 = high_resolution_clock::now();
+  auto worker = FlexDRWorker::load(workerStr, logger_, design_, nullptr);
   worker->incItrDepth();
   worker->setParentId(worker->getWorkerId());
   std::string serializedWorker = worker->getSerializedWorker();
@@ -2132,13 +2144,10 @@ void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
     if (marker.getConstraint())
       markers[marker.getLayerNum()][marker.getConstraint()->typeId()]++;
   }
-  // Run XGBRanker to get best combinations
+  // Run Ranker to get best combinations
   std::vector<SearchRepairArgs> args;
   #ifdef MONGODB
-  Py_Initialize();
-  bp::object sys_module = bp::import("sys"); 
-  sys_module.attr("path").attr("insert")(1, dist_dir_);
-  auto pyModule = bp::import("xgbranker");
+  high_resolution_clock::time_point p0 = high_resolution_clock::now();
   bp::dict workerDict;
   workerDict["xMin"] = xMin;
   workerDict["yMin"] = yMin;
@@ -2153,21 +2162,23 @@ void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
       std::ostringstream stream;
       stream << type;
       std::string str = stream.str();
-      workerDict[fmt::format("{}_{}", lName, str)] = num;
+      workerDict[fmt::format("{}_{}", lName, str)] = num / markers.size();
     }
   }
-  bp::list resultsArgs = bp::call_method<bp::list>(pyModule.ptr(), "getBestParams", workerDict, worker->getItrDepth()>=3 ? 5 : 10);
+  bp::list resultsArgs = bp::call_method<bp::list>(pyRanker_.ptr(), "getBestParams", workerDict, worker->getItrDepth()>=3 ? 5 : 10);
   for(int i = 0; i < bp::len(resultsArgs); i++)
   {
     bp::dict dict = bp::extract<bp::dict>(resultsArgs[i]);
     SearchRepairArgs arg;
     arg.followGuide = bp::extract<bool>(dict["followGuide"]);
     arg.mazeEndIter = bp::extract<int>(dict["mazeEndIter"]);
-    arg.workerDRCCost = bp::extract<int>(dict["workerDRCCost"]);
-    arg.workerMarkerCost = bp::extract<int>(dict["workerMarkerCost"]);
+    arg.workerDRCCost = ROUTESHAPECOST * bp::extract<int>(dict["workerDRCCost"]);
+    arg.workerMarkerCost = MARKERCOST * bp::extract<int>(dict["workerMarkerCost"]);
     arg.ripupMode = 0;
     args.push_back(arg);
   }
+  high_resolution_clock::time_point p1 = high_resolution_clock::now();
+  python_time_ += duration_cast<seconds>(p1 - p0).count();
   #endif
   // Send Worker With Args
   dst::JobMessage msg(dst::JobMessage::ROUTING_STUBBORN), result(dst::JobMessage::NONE);
@@ -2176,7 +2187,7 @@ void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
   StubbornRoutingJobDescription* rjd
       = static_cast<StubbornRoutingJobDescription*>(desc.get());
   rjd->setWorker(serializedWorker);
-  rjd->setWorkerId(workerId);
+  rjd->setWorkerId(id_in_batch);
   rjd->setArgs(args);
   rjd->setReplyPort(router_->local_port_);
   rjd->setReplyHost(router_->local_ip_);
@@ -2185,12 +2196,14 @@ void FlexDR::expandWorker(int workerId, FlexDRWorker* worker)
   if (!ok) {
     logger_->error(utl::DRT, 502, "Sending worker {} failed");
   }
-
+  high_resolution_clock::time_point t1 = high_resolution_clock::now();
+  expand_time_ += duration_cast<seconds>(t1 - t0).count();
 }
 
 void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>& workersInBatch)
 {
   //Creating Jobs for each worker in cloud (according to size)
+  asio::thread_pool recordPool(1);
   int k = 3;
   int totSz = 0;
   int workerId = 0;
@@ -2202,23 +2215,21 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
       workerId++;
       continue;
     }
-
+    std::string workerStr = worker->getSerializedWorker();
     // stupid I know. to be fixed later.
     {
-      auto copyWorker = FlexDRWorker::load(worker->getSerializedWorker(), logger_, design_, nullptr);
-      recordWorker(copyWorker.get());
-    }
-    {
-      auto copyWorker = FlexDRWorker::load(worker->getSerializedWorker(), logger_, design_, nullptr);
-      expandWorker(workerId, copyWorker.get());
+      asio::post(recordPool, boost::bind(&FlexDR::recordWorker, this, workerStr, -1, -1));
+      expandWorker(workerId, workerStr);
     }
     totSz += 10;
     workerId++;
   }
   //Run Workers Locally
   asio::thread_pool pool(1);
-  asio::post(pool, [this, k, &workersInBatch](){
+  int64_t timeoutSeconds = -1;
+  asio::post(pool, [this, k, &workersInBatch, &timeoutSeconds, &recordPool](){
     long long max_ops = 0;
+    high_resolution_clock::time_point t0_0 = high_resolution_clock::now();
     #pragma omp parallel for schedule(dynamic)
     for(int i = 0; i < workersInBatch.size(); i++)
     {
@@ -2233,7 +2244,7 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
         bestMarkers = -1;
       else
         bestMarkers = workersInBatch[i]->getBestNumMarkers();
-      recordWorker(workersInBatch[i].get(), bestMarkers, time_span.count());
+      asio::post(recordPool, boost::bind(&FlexDR::recordWorker, this, workersInBatch[i]->getSerializedWorker(), bestMarkers, time_span.count()));
       if (bestMarkers != -1) {
         #pragma omp critical
         {
@@ -2241,22 +2252,45 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
         }
       }
     }
+    high_resolution_clock::time_point t1_1 = high_resolution_clock::now();
+    timeoutSeconds = duration_cast<seconds>(t1_1 - t0_0).count() * k;
     max_ops *= k;
     if(max_ops == 0)
       logger_->warn(utl::DRT, 3410, "Max Ops 0");
     else {
       //Send TIMEOUT
-      auto desc = std::make_unique<TimeOutDescription>();
-      desc->setMaxOps(max_ops);
-      dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
-      msg.setJobDescription(std::move(desc));
-      dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+      // auto desc = std::make_unique<TimeOutDescription>();
+      // desc->setMaxOps(max_ops);
+      // dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+      // msg.setJobDescription(std::move(desc));
+      // dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
     }
   });
   //Wait For Results
   std::map<int, std::vector<WorkerResult>> resultMap;
+  high_resolution_clock::time_point begin_t = high_resolution_clock::now();
+  bool sentTimeOut = false;
   while(totSz)
   {
+    if (timeoutSeconds != -1 && !sentTimeOut && duration_cast<seconds>(high_resolution_clock::now() - begin_t).count() >= timeoutSeconds)
+    {
+      // Send TIMEOUT
+      auto tt = duration_cast<seconds>(high_resolution_clock::now() - begin_t).count();
+      auto desc = std::make_unique<TimeOutDescription>();
+      desc->setMaxOps(-3);
+      dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+      msg.setJobDescription(std::move(desc));
+      dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+      sentTimeOut = true;
+      logger_->report("    Sent TimeOut after {:02}:{:02}:{:02} Original is {:02}:{:02}:{:02}",
+                  frTime::getHours(tt),
+                  frTime::getMinutes(tt),
+                  frTime::getSeconds(tt),
+                  frTime::getHours(timeoutSeconds),
+                  frTime::getMinutes(timeoutSeconds),
+                  frTime::getSeconds(timeoutSeconds));
+    }
+
     std::vector<WorkerResult> results;
     if(!router_->getWorkerResults(results))
     {
@@ -2268,29 +2302,31 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
     {
       resultMap[result.id].push_back(result);
       auto resWorker = FlexDRWorker::load(result.workerStr, logger_, design_, nullptr);
-      recordWorker(resWorker.get(), result.numOfViolations, result.runTime);
+      asio::post(recordPool, boost::bind(&FlexDR::recordWorker, this,result.workerStr, result.numOfViolations, result.runTime));
       if (result.numOfViolations == 0)
       {
         //Send TIMEOUT
         {
-          // auto desc = std::make_unique<TimeOutDescription>();
-          // desc->setBannedId(result.id);
-          // desc->setMaxOps(-2);
-          // dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
-          // msg.setJobDescription(std::move(desc));
-          // dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+          auto desc = std::make_unique<TimeOutDescription>();
+          desc->setBannedId(result.id);
+          desc->setMaxOps(-2);
+          dst::JobMessage msg(dst::JobMessage::TIMEOUT, dst::JobMessage::BROADCAST), result;
+          msg.setJobDescription(std::move(desc));
+          dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
         }
         // Found a result with 0 violations
         // stop the local worker
         // router_->banWorker(result.id);
       } else
       {
-        if(result.numOfViolations != -1 && result.numOfViolations < workersInBatch.at(result.id)->getInitNumMarkers() && resWorker->getItrDepth() < k)
+        if(!sentTimeOut && result.numOfViolations != -1 &&
+           result.numOfViolations < workersInBatch.at(result.id)->getInitNumMarkers() &&
+           resWorker->getItrDepth() < k)
         {
           // We can expand more
-          auto resWorker2 = FlexDRWorker::load(result.workerStr, logger_, design_, nullptr);
-          expandWorker(result.id, resWorker2.get());
-          if (resWorker2->getItrDepth() == k)
+          auto newDepth = resWorker->getItrDepth() + 1;
+          expandWorker(result.id, result.workerStr);
+          if (newDepth == k)
             totSz += 5;
           else
             totSz += 10;
@@ -2299,6 +2335,7 @@ void FlexDR::distributeStubbornTiles(std::vector<std::unique_ptr<FlexDRWorker>>&
     }
   }
   pool.join();
+  recordPool.join();
   //Choose Best Result
   for(auto& [id, results] : resultMap)
   {
@@ -2379,6 +2416,18 @@ void FlexDR::end(bool done)
     logger_->metric(fmt::format("route__wirelength__iter:{}", iter_), totWlen / getDesign()->getTopBlock()->getDBUPerUU());
   }
 
+  logger_->report("expandTime {:02}:{:02}:{:02}",
+                  frTime::getHours(expand_time_),
+                  frTime::getMinutes(expand_time_),
+                  frTime::getSeconds(expand_time_));
+  logger_->report("pythonTime {:02}:{:02}:{:02}",
+                  frTime::getHours(python_time_),
+                  frTime::getMinutes(python_time_),
+                  frTime::getSeconds(python_time_));
+  logger_->report("recordTime {:02}:{:02}:{:02}",
+                  frTime::getHours(record_time_),
+                  frTime::getMinutes(record_time_),
+                  frTime::getSeconds(record_time_));
 
   if (VERBOSE > 0) {
     logger_->report("Total wire length = {} um.",
@@ -2684,6 +2733,13 @@ int FlexDR::main()
   if(dist_on_)
   {
     dist_->runWorker(router_->local_ip_.c_str(), router_->local_port_, true);
+    #ifdef MONGODB
+    Py_Initialize();
+    bp::object sys_module = bp::import("sys"); 
+    sys_module.attr("path").attr("insert")(1, dist_dir_);
+    auto pyModule = bp::import("ranker");
+    pyRanker_ = bp::call_method<bp::object>(pyModule.ptr(), "Ranker");
+    #endif
   }
   auto strategies = strategy();
   while(iter_ < strategies.size()) {
