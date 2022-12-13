@@ -735,7 +735,7 @@ void GlobalRouter::initNets(std::vector<Net*>& nets)
   if (nets.size() > 1 && seed_ != 0) {
     std::mt19937 g;
     g.seed(seed_);
-
+    logger_->report("Using Seed {}", seed_);
     utl::shuffle(nets.begin(), nets.end(), g);
   }
 
@@ -1375,6 +1375,7 @@ void GlobalRouter::perturbCapacities()
 
   std::mt19937 g;
   g.seed(seed_);
+  logger_->report("Using Seed {}", seed_);
 
   for (int layer = 1; layer <= max_routing_layer_; layer++) {
     std::uniform_int_distribution<int> uni_x(1, std::max(x_grids - 1, 1));

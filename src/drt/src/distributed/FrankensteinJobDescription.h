@@ -1,6 +1,6 @@
-/* Authors: Lutong Wang and Bangqi Xu */
+/* Authors: Osama */
 /*
- * Copyright (c) 2019, The Regents of the University of California
+ * Copyright (c) 2022, The Regents of the University of California
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -26,42 +26,53 @@
  * SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _FR_TIME_H_
-#define _FR_TIME_H_
+#pragma once
+#include <boost/serialization/base_object.hpp>
+#include <string>
 
-#include <chrono>
-#include <ctime>
-#include <iostream>
-
-#include "frBaseTypes.h"
-
-extern size_t getPeakRSS();
-extern size_t getCurrentRSS();
-
+#include "dst/JobMessage.h"
+namespace boost::serialization {
+class access;
+}
 namespace fr {
-class frTime
+
+class FrankensteinJobDescription : public dst::JobDescription
 {
  public:
-  frTime() : t0_(std::chrono::high_resolution_clock::now()), t_(clock()) {}
-  std::chrono::high_resolution_clock::time_point getT0() const { return t0_; }
-  void print(Logger* logger);
-  bool isExceed(double in)
+  FrankensteinJobDescription()
+      : gr_seed_(-1), drt_run_time_(-1), grt_run_time_(-1), drvs_(-1)
   {
-    auto t1 = std::chrono::high_resolution_clock::now();
-    auto time_span
-        = std::chrono::duration_cast<std::chrono::duration<double>>(t1 - t0_);
-    return (time_span.count() > in);
   }
-  static int getHours(int seconds) { return seconds / 3600; }
-  static int getMinutes(int seconds) { return (seconds % 3600) / 60; }
-  static int getSeconds(int seconds) { return seconds % 60; }
+  // Setter
+  void setDesignPath(const std::string& value) { design_path_ = value; }
+  void setGrSeed(const int& value) { gr_seed_ = value; }
+  void setDrtRunTime(const int& value) { drt_run_time_ = value; }
+  void setGrtRunTime(const int& value) { grt_run_time_ = value; }
+  void setDrvs(const int& value) { drvs_ = value; }
+  // Getters
+  std::string getDesignPath() const { return design_path_; }
+  int getGrSeed() const { return gr_seed_; }
+  int getDrtRunTime() const { return drt_run_time_; }
+  int getGrtRunTime() const { return grt_run_time_; }
+  int getDrvs() const { return drvs_; }
 
  private:
-  std::chrono::high_resolution_clock::time_point t0_;
-  clock_t t_;
+  std::string design_path_;
+  int gr_seed_;
+  int drt_run_time_;
+  int grt_run_time_;
+  int drvs_;
+
+  template <class Archive>
+  void serialize(Archive& ar, const unsigned int version)
+  {
+    (ar) & boost::serialization::base_object<dst::JobDescription>(*this);
+    (ar) & design_path_;
+    (ar) & gr_seed_;
+    (ar) & drt_run_time_;
+    (ar) & grt_run_time_;
+    (ar) & drvs_;
+  }
+  friend class boost::serialization::access;
 };
-
-std::ostream& operator<<(std::ostream& os, const frTime& t);
 }  // namespace fr
-
-#endif

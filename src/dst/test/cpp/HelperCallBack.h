@@ -47,6 +47,7 @@ class HelperCallBack : public dst::JobCallBack
   }
 
   void onFrDesignUpdated(dst::JobMessage& msg, dst::socket& sock) override {}
+  void onFrankensteinJobReceived(dst::JobMessage& msg, dst::socket& sock) override {}
 
  private:
   dst::Distributed* dist_;

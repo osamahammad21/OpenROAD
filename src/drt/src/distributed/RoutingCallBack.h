@@ -34,10 +34,13 @@
 #include <boost/asio/post.hpp>
 #include <boost/asio/thread_pool.hpp>
 #include <boost/bind/bind.hpp>
+#include <chrono>
+#include <ctime>
 #include <iostream>
 #include <mutex>
 
 #include "db/infra/frTime.h"
+#include "distributed/FrankensteinJobDescription.h"
 #include "distributed/RoutingJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR.h"
@@ -45,10 +48,10 @@
 #include "dst/JobCallBack.h"
 #include "dst/JobMessage.h"
 #include "global.h"
+#include "grt/GlobalRouter.h"
 #include "ord/OpenRoad.hh"
 #include "triton_route/TritonRoute.h"
 #include "utl/Logger.h"
-
 namespace asio = boost::asio;
 namespace odb {
 class dbDatabase;
@@ -139,6 +142,42 @@ class RoutingCallBack : public dst::JobCallBack
       frIArchive ar(stream);
       ar >> via_data_;
     }
+    dist_->sendResult(result, sock);
+    sock.close();
+  }
+
+  void onFrankensteinJobReceived(dst::JobMessage& msg,
+                                 dst::socket& sock) override
+  {
+    if (msg.getJobType() != dst::JobMessage::FRANKENSTEIN)
+      return;
+    FrankensteinJobDescription* desc
+        = static_cast<FrankensteinJobDescription*>(msg.getJobDescription());
+    auto grt = ord::OpenRoad::openRoad()->getGlobalRouter();
+    grt->clear();
+    router_->clearDesign();
+    ord::OpenRoad::openRoad()->readDb(desc->getDesignPath().c_str());
+    grt->setVerbose(true);
+    grt->setSeed(desc->getGrSeed());
+    grt->setOverflowIterations(100);
+    std::chrono::high_resolution_clock::time_point t0
+        = std::chrono::high_resolution_clock::now();
+    grt->globalRoute(true);
+    std::chrono::high_resolution_clock::time_point t1
+        = std::chrono::high_resolution_clock::now();
+    router_->main();
+    std::chrono::high_resolution_clock::time_point t2
+        = std::chrono::high_resolution_clock::now();
+
+    auto resultDesc = std::make_unique<FrankensteinJobDescription>();
+    dst::JobMessage result(dst::JobMessage::SUCCESS);
+    resultDesc->setGrSeed(desc->getGrSeed());
+    resultDesc->setDrvs(router_->getNumDRVs());
+    resultDesc->setGrtRunTime(
+        std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count());
+    resultDesc->setDrtRunTime(
+        std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count());
+    result.setJobDescription(std::move(resultDesc));
     dist_->sendResult(result, sock);
     sock.close();
   }

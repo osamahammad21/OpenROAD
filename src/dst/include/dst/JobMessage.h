@@ -60,6 +60,7 @@ class JobMessage
   {
     ROUTING,
     UPDATE_DESIGN,
+    FRANKENSTEIN,
     BALANCER,
     SUCCESS,
     ERROR,

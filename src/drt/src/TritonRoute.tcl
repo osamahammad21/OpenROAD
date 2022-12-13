@@ -392,6 +392,41 @@ proc detailed_route_set_unidirectional_layer { args } {
   drt::detailed_route_set_unidirectional_layer $args
 }
 
+
+sta::define_cmd_args "frankenstein_test" {
+    [-remote_host rhost]
+    [-remote_port rport]
+    [-shared_volume vol]
+    [-cloud_size sz]
+}
+proc frankenstein_test { args } {
+  sta::parse_key_args "detailed_route" args \
+    keys {-remote_host -remote_port -shared_volume -cloud_size} \
+    flags {}
+  if { [info exists keys(-remote_host)] } {
+    set rhost $keys(-remote_host)
+  } else {
+    utl::error DRT 520 "-remote_host is required for distributed routing."
+  }
+  if { [info exists keys(-remote_port)] } {
+    set rport $keys(-remote_port)
+  } else {
+    utl::error DRT 521 "-remote_port is required for distributed routing."
+  }
+  if { [info exists keys(-shared_volume)] } {
+    set vol $keys(-shared_volume)
+  } else {
+    utl::error DRT 522 "-shared_volume is required for distributed routing."
+  }
+  if { [info exists keys(-cloud_size)] } {
+    set cloudsz $keys(-cloud_size)
+  } else {
+    utl::error DRT 523 "-cloud_size is required for distributed routing."
+  }
+  drt::detailed_route_distributed $rhost $rport $vol $cloudsz
+  drt::frankenstein_test_cmd
+}
+
 namespace eval drt {
 
 proc step_dr { args } {

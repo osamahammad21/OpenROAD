@@ -151,6 +151,7 @@ target_link_libraries(drt
     OpenMP::OpenMP_CXX
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
+    grt
 )
 
 messages(

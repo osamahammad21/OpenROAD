@@ -55,6 +55,7 @@
 #include "sta/StaMain.hh"
 #include "stt/SteinerTreeBuilder.h"
 #include "ta/FlexTA.h"
+#include "utl/exception.h"
 using namespace std;
 using namespace fr;
 using namespace triton_route;
@@ -1093,4 +1094,47 @@ void TritonRoute::reportDRC(const string& file_name,
   } else {
     cout << "Error: Fail to open DRC report file\n";
   }
+}
+
+void TritonRoute::frankensteinTest()
+{
+  std::string design_path = fmt::format("{}/design.odb", shared_volume_);
+  ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
+  MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
+
+  omp_set_num_threads(MAX_THREADS);
+  utl::ThreadException exception;
+#pragma omp parallel for schedule(dynamic)
+  for (auto seed : {5, 10, 15, 20, 25, 30, 35, 40, 45, 50}) {
+    try {
+      dst::JobMessage msg(dst::JobMessage::FRANKENSTEIN),
+          result(dst::JobMessage::NONE);
+      std::unique_ptr<FrankensteinJobDescription> desc
+          = std::make_unique<FrankensteinJobDescription>();
+      desc->setDesignPath(design_path);
+      desc->setGrSeed(seed);
+      msg.setJobDescription(std::move(desc));
+      bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+      if (!ok)
+        logger_->error(DRT, 9505, "Frankenstein test failed");
+      FrankensteinJobDescription* resultDesc
+          = static_cast<FrankensteinJobDescription*>(
+              result.getJobDescription());
+#pragma omp critical
+      logger_->report(
+          "SEED {} DRVS {} GRT_RUNTIME {:02}:{:02}:{:02} DRT_RUNTIME "
+          "{:02}:{:02}:{:02}",
+          resultDesc->getGrSeed(),
+          resultDesc->getDrvs(),
+          frTime::getHours(resultDesc->getGrtRunTime()),
+          frTime::getMinutes(resultDesc->getGrtRunTime()),
+          frTime::getSeconds(resultDesc->getGrtRunTime()),
+          frTime::getHours(resultDesc->getDrtRunTime()),
+          frTime::getMinutes(resultDesc->getDrtRunTime()),
+          frTime::getSeconds(resultDesc->getDrtRunTime()));
+    } catch (...) {
+      exception.capture();
+    }
+  }
+  exception.rethrow();
 }

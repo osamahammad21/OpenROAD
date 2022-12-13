@@ -42,6 +42,7 @@
 #include <sstream>
 
 #include "db/infra/frTime.h"
+#include "distributed/FrankensteinJobDescription.h"
 #include "distributed/RoutingJobDescription.h"
 #include "distributed/frArchive.h"
 #include "dr/FlexDR_conn.h"
@@ -61,6 +62,7 @@ using namespace fr;
 using utl::ThreadException;
 
 BOOST_CLASS_EXPORT(RoutingJobDescription)
+BOOST_CLASS_EXPORT(FrankensteinJobDescription)
 
 enum class SerializationType
 {

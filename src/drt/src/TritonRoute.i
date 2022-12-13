@@ -118,6 +118,12 @@ void detailed_route_cmd(const char* outputMazeFile,
   router->main();
 }
 
+void frankenstein_test_cmd()
+{
+  auto* router = ord::OpenRoad::openRoad()->getTritonRoute();
+  router->frankensteinTest();
+}
+
 void pin_access_cmd(const char* dbProcessNode,
                     const char* bottomRoutingLayer,
                     const char* topRoutingLayer,
