@@ -166,7 +166,7 @@ include(UseSWIG)
 find_package(Boost REQUIRED)
 message(STATUS "boost: ${Boost_VERSION}")
 find_package(Python3 COMPONENTS Development REQUIRED)
-option(BUILD_PYTHON "Build the Python3 interface" ON)
+option(BUILD_PYTHON "Build the Python3 interface" OFF)
 
 option(ALLOW_WARNINGS "Flag to allow compilation with compiler warnings: on by default" ON)
 if (NOT ALLOW_WARNINGS)

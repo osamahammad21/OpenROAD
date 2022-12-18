@@ -80,6 +80,7 @@ TritonRoute::TritonRoute()
       dist_(nullptr),
       distributed_(false),
       dist_port_(0),
+      local_port_(0),
       results_sz_(0),
       cloud_sz_(0),
       dist_pool_(1)
@@ -125,6 +126,12 @@ void TritonRoute::setWorkerIpPort(const char* ip, unsigned short port)
 {
   dist_ip_ = ip;
   dist_port_ = port;
+}
+
+void TritonRoute::setLocalIpPort(const char* ip, unsigned short port)
+{
+  local_ip_ = ip;
+  local_port_ = port;
 }
 
 void TritonRoute::setSharedVolume(const std::string& vol)
@@ -488,6 +495,7 @@ void TritonRoute::init(Tcl_Interp* tcl_interp,
   sta::evalTclInit(tcl_interp, sta::drt_tcl_inits);
   FlexDRGraphics::init();
 }
+
 
 bool TritonRoute::initGuide()
 {
@@ -1098,29 +1106,37 @@ void TritonRoute::reportDRC(const string& file_name,
 
 void TritonRoute::frankensteinTest()
 {
+  dist_->runWorker(local_ip_.c_str(), local_port_, true);
   std::string design_path = fmt::format("{}/design.odb", shared_volume_);
   ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
-  MAX_THREADS = ord::OpenRoad::openRoad()->getThreadCount();
 
-  omp_set_num_threads(MAX_THREADS);
-  utl::ThreadException exception;
-#pragma omp parallel for schedule(dynamic)
   for (auto seed : {5, 10, 15, 20, 25, 30, 35, 40, 45, 50}) {
-    try {
-      dst::JobMessage msg(dst::JobMessage::FRANKENSTEIN),
-          result(dst::JobMessage::NONE);
-      std::unique_ptr<FrankensteinJobDescription> desc
-          = std::make_unique<FrankensteinJobDescription>();
-      desc->setDesignPath(design_path);
-      desc->setGrSeed(seed);
-      msg.setJobDescription(std::move(desc));
-      bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
-      if (!ok)
-        logger_->error(DRT, 9505, "Frankenstein test failed");
-      FrankensteinJobDescription* resultDesc
-          = static_cast<FrankensteinJobDescription*>(
-              result.getJobDescription());
-#pragma omp critical
+    dst::JobMessage msg(dst::JobMessage::FRANKENSTEIN),
+        result(dst::JobMessage::NONE);
+    std::unique_ptr<FrankensteinJobDescription> desc
+        = std::make_unique<FrankensteinJobDescription>();
+    desc->setDesignPath(design_path);
+    desc->setGrSeed(seed);
+    desc->setReplyHost(local_ip_);
+    desc->setReplyPort(local_port_);
+    msg.setJobDescription(std::move(desc));
+    bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
+    if (!ok)
+      logger_->error(DRT, 9505, "Frankenstein test failed");
+  }
+  logger_->report("Waiting For Results");
+  auto remaining = 10;
+  while(remaining > 0)
+  {
+    if (PendingResults.empty())
+    {
+      sleep(1);
+      continue;
+    }
+    std::unique_lock<std::mutex> lock(resultsMtx);
+    for(const auto& result : PendingResults)
+    {
+      auto resultDesc = static_cast<FrankensteinJobDescription*>(result.get());
       logger_->report(
           "SEED {} DRVS {} GRT_RUNTIME {:02}:{:02}:{:02} DRT_RUNTIME "
           "{:02}:{:02}:{:02}",
@@ -1132,9 +1148,8 @@ void TritonRoute::frankensteinTest()
           frTime::getHours(resultDesc->getDrtRunTime()),
           frTime::getMinutes(resultDesc->getDrtRunTime()),
           frTime::getSeconds(resultDesc->getDrtRunTime()));
-    } catch (...) {
-      exception.capture();
     }
+    remaining -= PendingResults.size();
+    PendingResults.clear();
   }
-  exception.rethrow();
 }

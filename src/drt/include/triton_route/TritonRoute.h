@@ -67,6 +67,7 @@ class SteinerTreeBuilder;
 }
 namespace dst {
 class Distributed;
+class JobDescription;
 }
 namespace triton_route {
 
@@ -137,6 +138,7 @@ class TritonRoute
                             int followGuide);
   void setDistributed(bool on = true);
   void setWorkerIpPort(const char* ip, unsigned short port);
+  void setLocalIpPort(const char* ip, unsigned short port);
   void setSharedVolume(const std::string& vol);
   void setCloudSize(unsigned int cloud_sz) { cloud_sz_ = cloud_sz; }
   unsigned int getCloudSize() const { return cloud_sz_; }
@@ -173,7 +175,8 @@ class TritonRoute
                  odb::Rect bbox = odb::Rect(0, 0, 0, 0));
   void checkDRC(const char* drc_file, int x0, int y0, int x1, int y1);
   void frankensteinTest();
-
+  std::vector<std::unique_ptr<dst::JobDescription>> PendingResults;
+  std::mutex resultsMtx;
  private:
   std::unique_ptr<fr::frDesign> design_;
   std::unique_ptr<fr::frDebugSettings> debug_;
@@ -188,12 +191,15 @@ class TritonRoute
   bool distributed_;
   std::string dist_ip_;
   unsigned short dist_port_;
+  std::string local_ip_;
+  unsigned short local_port_;
   std::string shared_volume_;
   std::vector<std::pair<int, std::string>> workers_results_;
   std::mutex results_mutex_;
   int results_sz_;
   unsigned int cloud_sz_;
   boost::asio::thread_pool dist_pool_;
+  
 
   void initDesign();
   bool initGuide();

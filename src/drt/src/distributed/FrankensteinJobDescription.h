@@ -40,7 +40,7 @@ class FrankensteinJobDescription : public dst::JobDescription
 {
  public:
   FrankensteinJobDescription()
-      : gr_seed_(-1), drt_run_time_(-1), grt_run_time_(-1), drvs_(-1)
+      : gr_seed_(-1), drt_run_time_(0), grt_run_time_(0), drvs_(-1), reply_port_(0)
   {
   }
   // Setter
@@ -49,12 +49,16 @@ class FrankensteinJobDescription : public dst::JobDescription
   void setDrtRunTime(const int& value) { drt_run_time_ = value; }
   void setGrtRunTime(const int& value) { grt_run_time_ = value; }
   void setDrvs(const int& value) { drvs_ = value; }
+  void setReplyHost(const std::string& value) { reply_host_ = value; }
+  void setReplyPort(const ushort& value) { reply_port_ = value; }
   // Getters
   std::string getDesignPath() const { return design_path_; }
   int getGrSeed() const { return gr_seed_; }
   int getDrtRunTime() const { return drt_run_time_; }
   int getGrtRunTime() const { return grt_run_time_; }
   int getDrvs() const { return drvs_; }
+  std::string getReplyHost() const { return reply_host_; }
+  ushort getReplyPort() const { return reply_port_; }
 
  private:
   std::string design_path_;
@@ -62,6 +66,8 @@ class FrankensteinJobDescription : public dst::JobDescription
   int drt_run_time_;
   int grt_run_time_;
   int drvs_;
+  std::string reply_host_;
+  ushort reply_port_;
 
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
@@ -72,6 +78,8 @@ class FrankensteinJobDescription : public dst::JobDescription
     (ar) & drt_run_time_;
     (ar) & grt_run_time_;
     (ar) & drvs_;
+    (ar) & reply_host_;
+    (ar) & reply_port_;
   }
   friend class boost::serialization::access;
 };

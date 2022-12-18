@@ -61,6 +61,7 @@ class JobMessage
     ROUTING,
     UPDATE_DESIGN,
     FRANKENSTEIN,
+    FRANKENSTEIN_RESULT,
     BALANCER,
     SUCCESS,
     ERROR,

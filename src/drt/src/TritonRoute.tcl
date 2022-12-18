@@ -176,7 +176,7 @@ proc detailed_route { args } {
       } else {
         utl::error DRT 516 "-cloud_size is required for distributed routing."
       }
-      drt::detailed_route_distributed $rhost $rport $vol $cloudsz
+      drt::detailed_route_distributed $rhost $rport "" 0 $vol $cloudsz
     }
     if { [info exists keys(-min_access_points)] } {
       sta::check_cardinal "-min_access_points" $keys(-min_access_points)
@@ -394,6 +394,8 @@ proc detailed_route_set_unidirectional_layer { args } {
 
 
 sta::define_cmd_args "frankenstein_test" {
+    [-local_host lhost]
+    [-local_port lport]
     [-remote_host rhost]
     [-remote_port rport]
     [-shared_volume vol]
@@ -401,8 +403,18 @@ sta::define_cmd_args "frankenstein_test" {
 }
 proc frankenstein_test { args } {
   sta::parse_key_args "detailed_route" args \
-    keys {-remote_host -remote_port -shared_volume -cloud_size} \
+    keys {-remote_host -remote_port -local_host -local_port -shared_volume -cloud_size} \
     flags {}
+  if { [info exists keys(-local_host)] } {
+    set lhost $keys(-local_host)
+  } else {
+    utl::error DRT 524 "-local_host is required for distributed routing."
+  }
+  if { [info exists keys(-local_port)] } {
+    set lport $keys(-local_port)
+  } else {
+    utl::error DRT 525 "-local_port is required for distributed routing."
+  }
   if { [info exists keys(-remote_host)] } {
     set rhost $keys(-remote_host)
   } else {
@@ -423,7 +435,7 @@ proc frankenstein_test { args } {
   } else {
     utl::error DRT 523 "-cloud_size is required for distributed routing."
   }
-  drt::detailed_route_distributed $rhost $rport $vol $cloudsz
+  drt::detailed_route_distributed $rhost $rport $lhost $lport $vol $cloudsz
   drt::frankenstein_test_cmd
 }
 

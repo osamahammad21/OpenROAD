@@ -146,40 +146,61 @@ class RoutingCallBack : public dst::JobCallBack
     sock.close();
   }
 
+  void onFrankensteinResultReceived(dst::JobMessage& msg,
+                                    dst::socket& sock) override
+  {
+    if (msg.getJobType() != dst::JobMessage::FRANKENSTEIN_RESULT)
+      return;
+    FrankensteinJobDescription* desc
+        = static_cast<FrankensteinJobDescription*>(msg.getJobDescription());
+    {
+      std::unique_lock<std::mutex> lock(router_->resultsMtx);
+      router_->PendingResults.push_back(std::make_unique<FrankensteinJobDescription>(*desc));
+    }
+    dst::JobMessage result(dst::JobMessage::SUCCESS);
+    dist_->sendResult(result, sock);
+    sock.close();
+  }
   void onFrankensteinJobReceived(dst::JobMessage& msg,
                                  dst::socket& sock) override
   {
     if (msg.getJobType() != dst::JobMessage::FRANKENSTEIN)
       return;
+    dst::JobMessage ack(dst::JobMessage::SUCCESS);
+    dist_->sendResult(ack, sock);
+    sock.close();
     FrankensteinJobDescription* desc
         = static_cast<FrankensteinJobDescription*>(msg.getJobDescription());
-    auto grt = ord::OpenRoad::openRoad()->getGlobalRouter();
-    grt->clear();
-    router_->clearDesign();
-    ord::OpenRoad::openRoad()->readDb(desc->getDesignPath().c_str());
-    grt->setVerbose(true);
-    grt->setSeed(desc->getGrSeed());
-    grt->setOverflowIterations(100);
-    std::chrono::high_resolution_clock::time_point t0
-        = std::chrono::high_resolution_clock::now();
-    grt->globalRoute(true);
-    std::chrono::high_resolution_clock::time_point t1
-        = std::chrono::high_resolution_clock::now();
-    router_->main();
-    std::chrono::high_resolution_clock::time_point t2
-        = std::chrono::high_resolution_clock::now();
-
+    std::chrono::high_resolution_clock::time_point t0, t1, t2;
+    bool error = false;
+    try {
+      auto grt = ord::OpenRoad::openRoad()->getGlobalRouter();
+      grt->clear();
+      router_->clearDesign();
+      ord::OpenRoad::openRoad()->readDb(desc->getDesignPath().c_str());
+      grt->setVerbose(true);
+      grt->setSeed(desc->getGrSeed());
+      grt->setOverflowIterations(100);
+      t0 = std::chrono::high_resolution_clock::now();
+      grt->globalRoute(true);
+      t1 = std::chrono::high_resolution_clock::now();
+      router_->main();
+      t2 = std::chrono::high_resolution_clock::now();
+    } catch(...){
+      error = true;
+    }
     auto resultDesc = std::make_unique<FrankensteinJobDescription>();
-    dst::JobMessage result(dst::JobMessage::SUCCESS);
+    dst::JobMessage result(dst::JobMessage::FRANKENSTEIN_RESULT);
     resultDesc->setGrSeed(desc->getGrSeed());
-    resultDesc->setDrvs(router_->getNumDRVs());
-    resultDesc->setGrtRunTime(
-        std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count());
-    resultDesc->setDrtRunTime(
-        std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count());
+    if (!error) {
+      resultDesc->setDrvs(router_->getNumDRVs());
+      resultDesc->setGrtRunTime(
+          std::chrono::duration_cast<std::chrono::seconds>(t1 - t0).count());
+      resultDesc->setDrtRunTime(
+          std::chrono::duration_cast<std::chrono::seconds>(t2 - t1).count());
+    }
     result.setJobDescription(std::move(resultDesc));
-    dist_->sendResult(result, sock);
-    sock.close();
+    dist_->sendJob(result, desc->getReplyHost().c_str(), desc->getReplyPort(), ack);
   }
 
  private:

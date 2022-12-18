@@ -36,6 +36,7 @@ class JobCallBack
   virtual void onRoutingJobReceived(JobMessage& msg, socket& sock) = 0;
   virtual void onFrDesignUpdated(JobMessage& msg, socket& sock) = 0;
   virtual void onFrankensteinJobReceived(JobMessage& msg, socket& sock) = 0;
+  virtual void onFrankensteinResultReceived(JobMessage& msg, socket& sock) = 0;
   virtual ~JobCallBack() {}
 };
 }  // namespace dst
