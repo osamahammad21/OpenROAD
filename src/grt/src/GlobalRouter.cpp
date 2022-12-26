@@ -1275,9 +1275,19 @@ void GlobalRouter::setMinRoutingLayer(const int min_layer)
   min_routing_layer_ = min_layer;
 }
 
+void GlobalRouter::setMinRoutingLayer(const char* min_layer)
+{
+  min_routing_layer_ = db_->getTech()->findLayer(min_layer)->getRoutingLevel();
+}
+
 void GlobalRouter::setMaxRoutingLayer(const int max_layer)
 {
   max_routing_layer_ = max_layer;
+}
+
+void GlobalRouter::setMaxRoutingLayer(const char* max_layer)
+{
+  max_routing_layer_ = db_->getTech()->findLayer(max_layer)->getRoutingLevel();;
 }
 
 void GlobalRouter::setMinLayerForClock(const int min_layer)

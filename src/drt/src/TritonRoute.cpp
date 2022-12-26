@@ -1104,13 +1104,15 @@ void TritonRoute::reportDRC(const string& file_name,
   }
 }
 
-void TritonRoute::frankensteinTest()
+void TritonRoute::frankensteinTest(const char* bottomRoutingLayer, const char* topRoutingLayer)
 {
+  BOTTOM_ROUTING_LAYER_NAME = bottomRoutingLayer;
+  TOP_ROUTING_LAYER_NAME = topRoutingLayer;
   dist_->runWorker(local_ip_.c_str(), local_port_, true);
   std::string design_path = fmt::format("{}/design.odb", shared_volume_);
   ord::OpenRoad::openRoad()->writeDb(design_path.c_str());
 
-  for (auto seed : {5, 10, 15, 20, 25, 30, 35, 40, 45, 50}) {
+  for (auto seed : {0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50}) {
     dst::JobMessage msg(dst::JobMessage::FRANKENSTEIN),
         result(dst::JobMessage::NONE);
     std::unique_ptr<FrankensteinJobDescription> desc
@@ -1119,6 +1121,8 @@ void TritonRoute::frankensteinTest()
     desc->setGrSeed(seed);
     desc->setReplyHost(local_ip_);
     desc->setReplyPort(local_port_);
+    desc->setMinLayer(BOTTOM_ROUTING_LAYER_NAME);
+    desc->setMaxLayer(TOP_ROUTING_LAYER_NAME);
     msg.setJobDescription(std::move(desc));
     bool ok = dist_->sendJob(msg, dist_ip_.c_str(), dist_port_, result);
     if (!ok)

@@ -149,6 +149,8 @@ class GlobalRouter
   void setAdjustment(const float adjustment);
   void setMinRoutingLayer(const int min_layer);
   void setMaxRoutingLayer(const int max_layer);
+  void setMinRoutingLayer(const char* min_layer);
+  void setMaxRoutingLayer(const char* max_layer);
   int getMaxRoutingLayer() const { return max_routing_layer_; }
   void setMinLayerForClock(const int min_layer);
   void setMaxLayerForClock(const int max_layer);

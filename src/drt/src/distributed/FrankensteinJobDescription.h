@@ -51,6 +51,8 @@ class FrankensteinJobDescription : public dst::JobDescription
   void setDrvs(const int& value) { drvs_ = value; }
   void setReplyHost(const std::string& value) { reply_host_ = value; }
   void setReplyPort(const ushort& value) { reply_port_ = value; }
+  void setMinLayer(const std::string& value) { min_layer_ = value; }
+  void setMaxLayer(const std::string& value) { max_layer_ = value; }
   // Getters
   std::string getDesignPath() const { return design_path_; }
   int getGrSeed() const { return gr_seed_; }
@@ -59,6 +61,8 @@ class FrankensteinJobDescription : public dst::JobDescription
   int getDrvs() const { return drvs_; }
   std::string getReplyHost() const { return reply_host_; }
   ushort getReplyPort() const { return reply_port_; }
+  std::string getMinLayer() const { return min_layer_; }
+  std::string getMaxLayer() const { return max_layer_; }
 
  private:
   std::string design_path_;
@@ -68,7 +72,8 @@ class FrankensteinJobDescription : public dst::JobDescription
   int drvs_;
   std::string reply_host_;
   ushort reply_port_;
-
+  std::string min_layer_;
+  std::string max_layer_;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {
@@ -80,6 +85,8 @@ class FrankensteinJobDescription : public dst::JobDescription
     (ar) & drvs_;
     (ar) & reply_host_;
     (ar) & reply_port_;
+    (ar) & min_layer_;
+    (ar) & max_layer_;
   }
   friend class boost::serialization::access;
 };

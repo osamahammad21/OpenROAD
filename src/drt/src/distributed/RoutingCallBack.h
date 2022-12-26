@@ -179,11 +179,15 @@ class RoutingCallBack : public dst::JobCallBack
       router_->clearDesign();
       ord::OpenRoad::openRoad()->readDb(desc->getDesignPath().c_str());
       grt->setVerbose(true);
+      grt->setMinRoutingLayer(desc->getMinLayer().c_str());
+      grt->setMaxRoutingLayer(desc->getMaxLayer().c_str());
       grt->setSeed(desc->getGrSeed());
       grt->setOverflowIterations(100);
       t0 = std::chrono::high_resolution_clock::now();
       grt->globalRoute(true);
       t1 = std::chrono::high_resolution_clock::now();
+      BOTTOM_ROUTING_LAYER_NAME = desc->getMinLayer();
+      TOP_ROUTING_LAYER_NAME = desc->getMaxLayer();
       router_->main();
       t2 = std::chrono::high_resolution_clock::now();
     } catch(...){

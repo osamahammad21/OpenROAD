@@ -400,10 +400,12 @@ sta::define_cmd_args "frankenstein_test" {
     [-remote_port rport]
     [-shared_volume vol]
     [-cloud_size sz]
+    [-bottom_routing_layer layer]
+    [-top_routing_layer layer]
 }
 proc frankenstein_test { args } {
   sta::parse_key_args "detailed_route" args \
-    keys {-remote_host -remote_port -local_host -local_port -shared_volume -cloud_size} \
+    keys {-remote_host -remote_port -local_host -local_port -shared_volume -cloud_size -bottom_routing_layer -top_routing_layer} \
     flags {}
   if { [info exists keys(-local_host)] } {
     set lhost $keys(-local_host)
@@ -435,8 +437,18 @@ proc frankenstein_test { args } {
   } else {
     utl::error DRT 523 "-cloud_size is required for distributed routing."
   }
+  if { [info exists keys(-bottom_routing_layer)] } {
+    set bottom_routing_layer $keys(-bottom_routing_layer)
+  } else {
+    set bottom_routing_layer ""
+  }
+  if { [info exists keys(-top_routing_layer)] } {
+    set top_routing_layer $keys(-top_routing_layer)
+  } else {
+    set top_routing_layer ""
+  }
   drt::detailed_route_distributed $rhost $rport $lhost $lport $vol $cloudsz
-  drt::frankenstein_test_cmd
+  drt::frankenstein_test_cmd $bottom_routing_layer $top_routing_layer
 }
 
 namespace eval drt {
