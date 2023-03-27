@@ -193,11 +193,6 @@ frCost FlexGridGraph::getEstCost(const FlexMazeIdx& src,
                  ? 1
                  : 0;
 
-  // If we are on the destination layer we will have to wrong way jog or
-  // via up/down or down/up so add the cheapest of those to the estimate
-  if (src.z() == dstMazeIdx1.z() && dstMazeIdx1.z() == dstMazeIdx2.z()) {
-  }
-
   int gridX = src.x();
   int gridY = src.y();
   int gridZ = src.z();
