@@ -31,6 +31,7 @@
 #include <bitset>
 #include <memory>
 #include <queue>
+#include <stack>
 #include <vector>
 
 #include "dr/FlexMazeTypes.h"
@@ -53,30 +54,23 @@ class FlexWavefrontGrid
         dist_(0),
         prevViaUp_(false),
         tLength_(std::numeric_limits<frCoord>::max()),
-        backTraceBuffer_()
+        dir_(frDirEnum::UNKNOWN)
   {
   }
-  FlexWavefrontGrid(int xIn,
-                    int yIn,
-                    int zIn,
-                    frCoord vLengthXIn,
-                    frCoord vLengthYIn,
-                    bool prevViaUpIn,
-                    frCoord tLengthIn,
-                    frCoord distIn,
-                    frCost pathCostIn,
-                    frCost costIn /*, frDirEnum preTurnDirIn*/)
-      : xIdx_(xIn),
-        yIdx_(yIn),
-        zIdx_(zIn),
-        pathCost_(pathCostIn),
-        cost_(costIn),
-        vLengthX_(vLengthXIn),
-        vLengthY_(vLengthYIn),
-        dist_(distIn),
-        prevViaUp_(prevViaUpIn),
-        tLength_(tLengthIn),
-        backTraceBuffer_()
+
+  FlexWavefrontGrid(const FlexWavefrontGrid& grid)
+      : xIdx_(grid.xIdx_),
+        yIdx_(grid.yIdx_),
+        zIdx_(grid.zIdx_),
+        pathCost_(grid.pathCost_),
+        cost_(grid.cost_),
+        vLengthX_(grid.vLengthX_),
+        vLengthY_(grid.vLengthY_),
+        dist_(grid.dist_),
+        prevViaUp_(grid.prevViaUp_),
+        tLength_(grid.tLength_),
+        dir_(grid.dir_),
+        prev_grid_(grid.prev_grid_)
   {
   }
   FlexWavefrontGrid(int xIn,
@@ -89,7 +83,7 @@ class FlexWavefrontGrid
                     frCoord distIn,
                     frCost pathCostIn,
                     frCost costIn,
-                    std::bitset<WAVEFRONTBITSIZE> backTraceBufferIn)
+                    frDirEnum dirIn)
       : xIdx_(xIn),
         yIdx_(yIn),
         zIdx_(zIn),
@@ -100,7 +94,7 @@ class FlexWavefrontGrid
         dist_(distIn),
         prevViaUp_(prevViaUpIn),
         tLength_(tLengthIn),
-        backTraceBuffer_(backTraceBufferIn)
+        dir_(dirIn)
   {
   }
   bool operator<(const FlexWavefrontGrid& b) const
@@ -126,10 +120,6 @@ class FlexWavefrontGrid
   frMIdx z() const { return zIdx_; }
   frCost getPathCost() const { return pathCost_; }
   frCost getCost() const { return cost_; }
-  std::bitset<WAVEFRONTBITSIZE> getBackTraceBuffer() const
-  {
-    return backTraceBuffer_;
-  }
   frCoord getLength() const { return vLengthX_; }
   void getVLength(frCoord& vLengthXIn, frCoord& vLengthYIn) const
   {
@@ -146,27 +136,19 @@ class FlexWavefrontGrid
     vLengthY_ = 0;
   }
   void setPrevViaUp(bool in) { prevViaUp_ = in; }
-  frDirEnum getLastDir() const
-  {
-    auto currDirVal = backTraceBuffer_.to_ulong() & 0b111u;
-    return static_cast<frDirEnum>(currDirVal);
-  }
-  bool isBufferFull() const
-  {
-    std::bitset<WAVEFRONTBITSIZE> mask = WAVEFRONTBUFFERHIGHMASK;
-    return (mask & backTraceBuffer_).any();
-  }
-  frDirEnum shiftAddBuffer(const frDirEnum& dir)
-  {
-    auto retBS = static_cast<frDirEnum>(
-        (backTraceBuffer_ >> (WAVEFRONTBITSIZE - DIRBITSIZE)).to_ulong());
-    backTraceBuffer_ <<= DIRBITSIZE;
-    std::bitset<WAVEFRONTBITSIZE> newBS = (unsigned) dir;
-    backTraceBuffer_ |= newBS;
-    return retBS;
-  }
+
   void setSrcTaperBox(const frBox3D* b) { srcTaperBox = b; }
   const frBox3D* getSrcTaperBox() const { return srcTaperBox; }
+  void setPrevGrid(const std::shared_ptr<FlexWavefrontGrid>& prev)
+  {
+    prev_grid_ = prev;
+  }
+  const std::shared_ptr<FlexWavefrontGrid>& getPrevGrid() const
+  {
+    return prev_grid_;
+  }
+  void setDir(const frDirEnum& dir) { dir_ = dir; }
+  frDirEnum getLastDir() const { return dir_; }
 
  private:
   frMIdx xIdx_, yIdx_, zIdx_;
@@ -177,11 +159,24 @@ class FlexWavefrontGrid
   frCoord dist_;  // to maze center
   bool prevViaUp_;
   frCoord tLength_;  // length since last turn
-  std::bitset<WAVEFRONTBITSIZE> backTraceBuffer_;
   const frBox3D* srcTaperBox = nullptr;
+  frDirEnum dir_;
+  std::shared_ptr<FlexWavefrontGrid> prev_grid_{nullptr};
 };
 
-class myPriorityQueue : public std::priority_queue<FlexWavefrontGrid>
+struct CmpWaveFrontPtrs
+{
+  bool operator()(const std::shared_ptr<FlexWavefrontGrid>& lhs,
+                  const std::shared_ptr<FlexWavefrontGrid>& rhs) const
+  {
+    return *(lhs.get()) < *(rhs.get());
+  }
+};
+
+class myPriorityQueue
+    : public std::priority_queue<std::shared_ptr<FlexWavefrontGrid>,
+                                 vector<std::shared_ptr<FlexWavefrontGrid>>,
+                                 CmpWaveFrontPtrs>
 {
  public:
   void cleanup() { this->c.clear(); }
@@ -197,9 +192,15 @@ class FlexWavefront
 {
  public:
   bool empty() const { return wavefrontPQ_.empty(); }
-  const FlexWavefrontGrid& top() const { return wavefrontPQ_.top(); }
+  const std::shared_ptr<FlexWavefrontGrid>& top() const
+  {
+    return wavefrontPQ_.top();
+  }
   void pop() { wavefrontPQ_.pop(); }
-  void push(const FlexWavefrontGrid& in) { wavefrontPQ_.push(in); }
+  void push(const std::shared_ptr<FlexWavefrontGrid>& in)
+  {
+    wavefrontPQ_.push(in);
+  }
   unsigned int size() const { return wavefrontPQ_.size(); }
   void cleanup() { wavefrontPQ_.cleanup(); }
   void fit() { wavefrontPQ_.fit(); }

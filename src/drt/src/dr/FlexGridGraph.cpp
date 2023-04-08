@@ -77,10 +77,16 @@ void FlexGridGraph::initGrids(
   prevDirs_.clear();
   srcs_.clear();
   dsts_.clear();
+  cost_.clear();
+  visited_.clear();
+  nodes_status_.clear();
 
   prevDirs_.resize(capacity * 3, 0);
   srcs_.resize(capacity, 0);
   dsts_.resize(capacity, 0);
+  cost_.resize(capacity, std::numeric_limits<frCost>::max());
+  visited_.resize(capacity, false);
+  nodes_status_.resize(capacity, NodeStatus());
   guides_.clear();
   if (followGuide) {
     guides_.resize(capacity, 0);
@@ -449,6 +455,9 @@ void FlexGridGraph::resetDst()
 void FlexGridGraph::resetPrevNodeDir()
 {
   prevDirs_.assign(prevDirs_.size(), 0);
+  cost_.assign(cost_.size(), std::numeric_limits<frCost>::max());
+  visited_.assign(visited_.size(), false);
+  nodes_status_.assign(nodes_status_.size(), NodeStatus());
 }
 
 // print the grid graph with edge and vertex for debug purpose

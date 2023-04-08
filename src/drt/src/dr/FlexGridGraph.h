@@ -105,7 +105,6 @@ class FlexGridGraph
   {
     return nodes_[getIdx(x, y, z)].hasGridCostUp;
   }
-
   void getBBox(Rect& in) const
   {
     if (xCoords_.size() && yCoords_.size()) {
@@ -889,6 +888,8 @@ class FlexGridGraph
     cout << "fixedShapeCostVia " << n.fixedShapeCostVia << "\n";
     cout << "fixedShapeCostPlanar " << n.fixedShapeCostPlanar << "\n";
   }
+  void evaluateWaveFrontExpansion(
+      const std::shared_ptr<FlexWavefrontGrid>& newGrid);
 
  private:
   frTechObject* tech_;
@@ -938,7 +939,24 @@ class FlexGridGraph
     friend class boost::serialization::access;
   };
   static_assert(sizeof(Node) == 8);
+  struct Expansion
+  {
+    int vLengthX;
+    int vLengthY;
+    int tLength;
+    bool prevViaUp;
+    bool viaUpAllowed;
+    bool viaDownAllowed;
+    frCost cost;
+  };
+  struct NodeStatus
+  {
+    NodeStatus() : cost(std::numeric_limits<frCost>::max()) {}
+    std::vector<Expansion> expansions;
+    frCost cost;
+  };
   frVector<Node> nodes_;
+  frVector<NodeStatus> nodes_status_;
   std::vector<bool> prevDirs_;
   std::vector<bool> srcs_;
   std::vector<bool> dsts_;
@@ -960,7 +978,9 @@ class FlexGridGraph
   frNonDefaultRule* ndr_;
   const frBox3D*
       dstTaperBox;  // taper box for the current dest pin in the search
-
+  // OSAMA: astar vectors
+  std::vector<frCost> cost_;
+  std::vector<bool> visited_;
   FlexGridGraph()
       : tech_(nullptr),
         drWorker_(nullptr),
@@ -1152,19 +1172,17 @@ class FlexGridGraph
   frCost getNextPathCost(const FlexWavefrontGrid& currGrid,
                          const frDirEnum& dir) const;
   frDirEnum getLastDir(const std::bitset<WAVEFRONTBITSIZE>& buffer) const;
-  void traceBackPath(const FlexWavefrontGrid& currGrid,
+  void traceBackPath(const std::shared_ptr<FlexWavefrontGrid>& currGrid,
                      std::vector<FlexMazeIdx>& path,
                      std::vector<FlexMazeIdx>& root,
                      FlexMazeIdx& ccMazeIdx1,
                      FlexMazeIdx& ccMazeIdx2) const;
-  void expandWavefront(FlexWavefrontGrid& currGrid,
+  void expandWavefront(const std::shared_ptr<FlexWavefrontGrid>& currGrid,
                        const FlexMazeIdx& dstMazeIdx1,
                        const FlexMazeIdx& dstMazeIdx2,
                        const Point& centerPt);
   bool isExpandable(const FlexWavefrontGrid& currGrid, frDirEnum dir) const;
-  FlexMazeIdx getTailIdx(const FlexMazeIdx& currIdx,
-                         const FlexWavefrontGrid& currGrid) const;
-  void expand(FlexWavefrontGrid& currGrid,
+  void expand(const std::shared_ptr<FlexWavefrontGrid>& currGrid,
               const frDirEnum& dir,
               const FlexMazeIdx& dstMazeIdx1,
               const FlexMazeIdx& dstMazeIdx2,
@@ -1178,7 +1196,9 @@ class FlexGridGraph
   bool outOfDieVia(frMIdx x, frMIdx y, frMIdx z, const Rect& dieBox);
   bool hasOutOfDieViol(frMIdx x, frMIdx y, frMIdx z);
   bool isWorkerBorder(frMIdx v, bool isVert);
-
+  // checks forbidden via2via
+  bool isForbiddenVia(const FlexWavefrontGrid& currGrid,
+                      const frDirEnum& dir) const;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int version)
   {

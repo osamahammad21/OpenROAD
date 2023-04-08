@@ -34,12 +34,14 @@ using namespace std;
 using namespace fr;
 
 int debugMazeIter = std::numeric_limits<int>().max();
-void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
-                           const frDirEnum& dir,
-                           const FlexMazeIdx& dstMazeIdx1,
-                           const FlexMazeIdx& dstMazeIdx2,
-                           const Point& centerPt)
+void FlexGridGraph::expand(
+    const std::shared_ptr<FlexWavefrontGrid>& currGridPtr,
+    const frDirEnum& dir,
+    const FlexMazeIdx& dstMazeIdx1,
+    const FlexMazeIdx& dstMazeIdx2,
+    const Point& centerPt)
 {
+  auto currGrid = *currGridPtr;
   frCost nextEstCost, nextPathCost;
   int gridX = currGrid.x();
   int gridY = currGrid.y();
@@ -107,7 +109,7 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
                                       currDist,
                                       nextPathCost,
                                       nextPathCost + nextEstCost,
-                                      currGrid.getBackTraceBuffer());
+                                      dir);
   if (dir == frDirEnum::U || dir == frDirEnum::D) {
     nextWavefrontGrid.resetLength();
     if (dir == frDirEnum::U) {
@@ -120,21 +122,16 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
       && currGrid.getSrcTaperBox()->contains(
           nextWavefrontGrid.x(), nextWavefrontGrid.y(), nextWavefrontGrid.z()))
     nextWavefrontGrid.setSrcTaperBox(currGrid.getSrcTaperBox());
-  // update wavefront buffer
-  auto tailDir = nextWavefrontGrid.shiftAddBuffer(dir);
-  // non-buffer enablement is faster for ripup all
-  // commit grid prev direction if needed
-  auto tailIdx = getTailIdx(nextIdx, nextWavefrontGrid);
-  if (tailDir != frDirEnum::UNKNOWN) {
-    if (getPrevAstarNodeDir(tailIdx) == frDirEnum::UNKNOWN
-        || getPrevAstarNodeDir(tailIdx) == tailDir) {
-      setPrevAstarNodeDir(tailIdx.x(), tailIdx.y(), tailIdx.z(), tailDir);
-      wavefront_.push(nextWavefrontGrid);
-    }
-  } else {
-    // add to wavefront
-    wavefront_.push(nextWavefrontGrid);
+
+  auto nextWavefrontGridPtr
+      = std::make_shared<FlexWavefrontGrid>(nextWavefrontGrid);
+  nextWavefrontGridPtr->setPrevGrid(currGridPtr);
+  auto newIdx = getIdx(gridX, gridY, gridZ);
+  if (cost_[newIdx] > nextWavefrontGrid.getCost()) {
+    cost_[newIdx] = nextWavefrontGrid.getCost();
+    wavefront_.push(nextWavefrontGridPtr);
   }
+  // evaluateWaveFrontExpansion(nextWavefrontGridPtr);
   if (drWorker_->getDRIter() >= debugMazeIter)
     cout << "Creating " << nextWavefrontGrid.x() << " " << nextWavefrontGrid.y()
          << " " << nextWavefrontGrid.z()
@@ -144,14 +141,73 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
          << nextWavefrontGrid.getPathCost() << "\n";
   return;
 }
-
-void FlexGridGraph::expandWavefront(FlexWavefrontGrid& currGrid,
-                                    const FlexMazeIdx& dstMazeIdx1,
-                                    const FlexMazeIdx& dstMazeIdx2,
-                                    const Point& centerPt)
+// unused for now
+void FlexGridGraph::evaluateWaveFrontExpansion(
+    const std::shared_ptr<FlexWavefrontGrid>& newGrid)
 {
+  auto newIdx = getIdx(newGrid->x(), newGrid->y(), newGrid->z());
+  auto& node_status = nodes_status_[newIdx];
+  bool commitExpansion = false;
+  Expansion newExpansion;
+  newGrid->getVLength(newExpansion.vLengthX, newExpansion.vLengthY);
+  newExpansion.tLength = newGrid->getTLength();
+
+  newExpansion.cost = newGrid->getCost();
+  newExpansion.prevViaUp = newGrid->isPrevViaUp();
+  newExpansion.viaUpAllowed = isForbiddenVia(*newGrid, frDirEnum::U);
+  newExpansion.viaDownAllowed = isForbiddenVia(*newGrid, frDirEnum::D);
+  if (node_status.expansions.empty()) {
+    commitExpansion = true;
+  } else {
+    if (node_status.cost != std::numeric_limits<frCost>::max()
+        && newExpansion.cost >= node_status.cost) {
+      commitExpansion = false;
+    } else {
+      for (auto itr = node_status.expansions.begin();
+           itr != node_status.expansions.end();) {
+        auto expansion = *itr;
+        bool remove = false;
+        if (newExpansion.vLengthX > expansion.vLengthX
+            && newExpansion.vLengthY > expansion.vLengthY
+            && newGrid->getPathCost() < expansion.cost) {
+          commitExpansion = true;
+          remove = true;
+        }
+        if (!commitExpansion) {
+          if (newExpansion.vLengthX > expansion.vLengthX
+              || newExpansion.vLengthY > expansion.vLengthY) {
+            commitExpansion = true;
+          }
+        }
+        if (remove)
+          itr = node_status.expansions.erase(itr);
+        else
+          itr++;
+      }
+    }
+  }
+  if (commitExpansion) {
+    node_status.expansions.push_back(newExpansion);
+    if (newExpansion.vLengthX + newExpansion.vLengthY > 0
+        && newExpansion.viaDownAllowed && newExpansion.viaUpAllowed
+        && newExpansion.cost < node_status.cost)
+      node_status.cost = newExpansion.cost;
+    wavefront_.push(newGrid);
+  }
+}
+
+void FlexGridGraph::expandWavefront(
+    const std::shared_ptr<FlexWavefrontGrid>& currGrid,
+    const FlexMazeIdx& dstMazeIdx1,
+    const FlexMazeIdx& dstMazeIdx2,
+    const Point& centerPt)
+{
+  auto mazeIdx = getIdx(currGrid->x(), currGrid->y(), currGrid->z());
+  if (visited_[mazeIdx])
+    return;
+  visited_[mazeIdx] = true;
   for (const auto dir : frDirEnumAll) {
-    if (isExpandable(currGrid, dir)) {
+    if (isExpandable(*currGrid, dir)) {
       expand(currGrid, dir, dstMazeIdx1, dstMazeIdx2, centerPt);
     }
   }
@@ -320,114 +376,115 @@ frCost FlexGridGraph::getNextPathCost(const FlexWavefrontGrid& currGrid,
     // original
     ++nextPathCost;
   }
-
-  // via2viaForbiddenLen enablement
-  if (dir == frDirEnum::U || dir == frDirEnum::D) {
-    frCoord currVLengthX = 0;
-    frCoord currVLengthY = 0;
-    currGrid.getVLength(currVLengthX, currVLengthY);
-    bool isCurrViaUp = (dir == frDirEnum::U);
-    bool isForbiddenVia2Via = false;
-    // check only y
-    if (currVLengthX == 0 && currVLengthY > 0
-        && getTech()->isVia2ViaForbiddenLen(gridZ,
-                                            !(currGrid.isPrevViaUp()),
-                                            !isCurrViaUp,
-                                            false,
-                                            currVLengthY,
-                                            ndr_)) {
-      isForbiddenVia2Via = true;
-      // check only x
-    } else if (currVLengthX > 0 && currVLengthY == 0
-               && getTech()->isVia2ViaForbiddenLen(gridZ,
-                                                   !(currGrid.isPrevViaUp()),
-                                                   !isCurrViaUp,
-                                                   true,
-                                                   currVLengthX,
-                                                   ndr_)) {
-      isForbiddenVia2Via = true;
-      // check both x and y
-    } else if (getTech()->isVia2ViaForbiddenLen(gridZ,
-                                                !(currGrid.isPrevViaUp()),
-                                                !isCurrViaUp,
-                                                false,
-                                                currVLengthY,
-                                                ndr_)
-               && getTech()->isVia2ViaForbiddenLen(gridZ,
-                                                   !(currGrid.isPrevViaUp()),
-                                                   !isCurrViaUp,
-                                                   true,
-                                                   currVLengthX,
-                                                   ndr_)) {
-      isForbiddenVia2Via = true;
-    }
-
-    if (isForbiddenVia2Via) {
-      if (drWorker_) {
-        if (drWorker_->getDRIter() >= debugMazeIter)
-          cout << "isForbiddenVia2Via\n";
-        if (drWorker_->getDRIter() >= 3) {
-          nextPathCost += 2 * ggMarkerCost_ * edgeLength;
-        } else {
-          nextPathCost += 2 * ggDRCCost_ * edgeLength;
-        }
-      }
-    }
-  }
-
-  // via2turn forbidden len enablement
-  frCoord tLength = std::numeric_limits<frCoord>::max();
-  frCoord tLengthDummy = 0;
-  bool isTLengthViaUp = false;
-  bool isForbiddenTLen = false;
-  if (currDir != frDirEnum::UNKNOWN && currDir != dir) {
-    // next dir is a via
+  // OSAMA: removing dependency on history
+  if (false) {
+    // via2viaForbiddenLen enablement
     if (dir == frDirEnum::U || dir == frDirEnum::D) {
-      isTLengthViaUp = (dir == frDirEnum::U);
-      // if there was a turn before
-      if (currDir == frDirEnum::W || currDir == frDirEnum::E) {
-        tLength = currGrid.getTLength();
-        if (getTech()->isViaForbiddenTurnLen(
-                gridZ, !isTLengthViaUp, true, tLength, ndr_)) {
-          isForbiddenTLen = true;
-        }
-      } else if (currDir == frDirEnum::S || currDir == frDirEnum::N) {
-        tLength = currGrid.getTLength();
-        if (getTech()->isViaForbiddenTurnLen(
-                gridZ, !isTLengthViaUp, false, tLength, ndr_)) {
-          isForbiddenTLen = true;
-        }
+      frCoord currVLengthX = 0;
+      frCoord currVLengthY = 0;
+      currGrid.getVLength(currVLengthX, currVLengthY);
+      bool isCurrViaUp = (dir == frDirEnum::U);
+      bool isForbiddenVia2Via = false;
+      // check only y
+      if (currVLengthX == 0 && currVLengthY > 0
+          && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                              !(currGrid.isPrevViaUp()),
+                                              !isCurrViaUp,
+                                              false,
+                                              currVLengthY,
+                                              ndr_)) {
+        isForbiddenVia2Via = true;
+        // check only x
+      } else if (currVLengthX > 0 && currVLengthY == 0
+                 && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                                     !(currGrid.isPrevViaUp()),
+                                                     !isCurrViaUp,
+                                                     true,
+                                                     currVLengthX,
+                                                     ndr_)) {
+        isForbiddenVia2Via = true;
+        // check both x and y
+      } else if (getTech()->isVia2ViaForbiddenLen(gridZ,
+                                                  !(currGrid.isPrevViaUp()),
+                                                  !isCurrViaUp,
+                                                  false,
+                                                  currVLengthY,
+                                                  ndr_)
+                 && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                                     !(currGrid.isPrevViaUp()),
+                                                     !isCurrViaUp,
+                                                     true,
+                                                     currVLengthX,
+                                                     ndr_)) {
+        isForbiddenVia2Via = true;
       }
-      // curr is a planar turn
-    } else {
-      isTLengthViaUp = currGrid.isPrevViaUp();
-      if (currDir == frDirEnum::W || currDir == frDirEnum::E) {
-        currGrid.getVLength(tLength, tLengthDummy);
-        if (getTech()->isViaForbiddenTurnLen(
-                gridZ, !isTLengthViaUp, true, tLength, ndr_)) {
-          isForbiddenTLen = true;
-        }
-      } else if (currDir == frDirEnum::S || currDir == frDirEnum::N) {
-        currGrid.getVLength(tLengthDummy, tLength);
-        if (getTech()->isViaForbiddenTurnLen(
-                gridZ, !isTLengthViaUp, false, tLength, ndr_)) {
-          isForbiddenTLen = true;
+
+      if (isForbiddenVia2Via) {
+        if (drWorker_) {
+          if (drWorker_->getDRIter() >= debugMazeIter)
+            cout << "isForbiddenVia2Via\n";
+          if (drWorker_->getDRIter() >= 3) {
+            nextPathCost += 2 * ggMarkerCost_ * edgeLength;
+          } else {
+            nextPathCost += 2 * ggDRCCost_ * edgeLength;
+          }
         }
       }
     }
-    if (isForbiddenTLen) {
-      if (drWorker_) {
-        if (drWorker_->getDRIter() >= debugMazeIter)
-          cout << "isForbiddenTLen\n";
-        if (drWorker_->getDRIter() >= 3) {
-          nextPathCost += 2 * ggDRCCost_ * edgeLength;
-        } else {
-          nextPathCost += 2 * ggMarkerCost_ * edgeLength;
+
+    // via2turn forbidden len enablement
+    frCoord tLength = std::numeric_limits<frCoord>::max();
+    frCoord tLengthDummy = 0;
+    bool isTLengthViaUp = false;
+    bool isForbiddenTLen = false;
+    if (currDir != frDirEnum::UNKNOWN && currDir != dir) {
+      // next dir is a via
+      if (dir == frDirEnum::U || dir == frDirEnum::D) {
+        isTLengthViaUp = (dir == frDirEnum::U);
+        // if there was a turn before
+        if (currDir == frDirEnum::W || currDir == frDirEnum::E) {
+          tLength = currGrid.getTLength();
+          if (getTech()->isViaForbiddenTurnLen(
+                  gridZ, !isTLengthViaUp, true, tLength, ndr_)) {
+            isForbiddenTLen = true;
+          }
+        } else if (currDir == frDirEnum::S || currDir == frDirEnum::N) {
+          tLength = currGrid.getTLength();
+          if (getTech()->isViaForbiddenTurnLen(
+                  gridZ, !isTLengthViaUp, false, tLength, ndr_)) {
+            isForbiddenTLen = true;
+          }
+        }
+        // curr is a planar turn
+      } else {
+        isTLengthViaUp = currGrid.isPrevViaUp();
+        if (currDir == frDirEnum::W || currDir == frDirEnum::E) {
+          currGrid.getVLength(tLength, tLengthDummy);
+          if (getTech()->isViaForbiddenTurnLen(
+                  gridZ, !isTLengthViaUp, true, tLength, ndr_)) {
+            isForbiddenTLen = true;
+          }
+        } else if (currDir == frDirEnum::S || currDir == frDirEnum::N) {
+          currGrid.getVLength(tLengthDummy, tLength);
+          if (getTech()->isViaForbiddenTurnLen(
+                  gridZ, !isTLengthViaUp, false, tLength, ndr_)) {
+            isForbiddenTLen = true;
+          }
+        }
+      }
+      if (isForbiddenTLen) {
+        if (drWorker_) {
+          if (drWorker_->getDRIter() >= debugMazeIter)
+            cout << "isForbiddenTLen\n";
+          if (drWorker_->getDRIter() >= 3) {
+            nextPathCost += 2 * ggDRCCost_ * edgeLength;
+          } else {
+            nextPathCost += 2 * ggMarkerCost_ * edgeLength;
+          }
         }
       }
     }
   }
-
   if (useNDRCosts(currGrid))
     nextPathCost += getCostsNDR(gridX, gridY, gridZ, dir, currDir, layer);
   else {
@@ -656,22 +713,49 @@ frMIdx FlexGridGraph::getUpperBoundIndex(const frVector<frCoord>& tracks,
   return it - tracks.begin();
 }
 
-FlexMazeIdx FlexGridGraph::getTailIdx(const FlexMazeIdx& currIdx,
-                                      const FlexWavefrontGrid& currGrid) const
+bool FlexGridGraph::isForbiddenVia(const FlexWavefrontGrid& currGrid,
+                                   const frDirEnum& dir) const
 {
-  int gridX = currIdx.x();
-  int gridY = currIdx.y();
-  int gridZ = currIdx.z();
-  auto backTraceBuffer = currGrid.getBackTraceBuffer();
-  for (int i = 0; i < WAVEFRONTBUFFERSIZE; ++i) {
-    int currDirVal
-        = backTraceBuffer.to_ulong()
-          - ((backTraceBuffer.to_ulong() >> DIRBITSIZE) << DIRBITSIZE);
-    frDirEnum currDir = static_cast<frDirEnum>(currDirVal);
-    backTraceBuffer >>= DIRBITSIZE;
-    getPrevGrid(gridX, gridY, gridZ, currDir);
+  frMIdx gridZ = currGrid.z();
+  frCoord currVLengthX = 0;
+  frCoord currVLengthY = 0;
+  currGrid.getVLength(currVLengthX, currVLengthY);
+  bool isCurrViaUp = (dir == frDirEnum::U);
+  bool isForbiddenVia2Via = false;
+  // check only y
+  if (currVLengthX == 0 && currVLengthY > 0
+      && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                          !(currGrid.isPrevViaUp()),
+                                          !isCurrViaUp,
+                                          false,
+                                          currVLengthY,
+                                          ndr_)) {
+    isForbiddenVia2Via = true;
+    // check only x
+  } else if (currVLengthX > 0 && currVLengthY == 0
+             && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                                 !(currGrid.isPrevViaUp()),
+                                                 !isCurrViaUp,
+                                                 true,
+                                                 currVLengthX,
+                                                 ndr_)) {
+    isForbiddenVia2Via = true;
+    // check both x and y
+  } else if (getTech()->isVia2ViaForbiddenLen(gridZ,
+                                              !(currGrid.isPrevViaUp()),
+                                              !isCurrViaUp,
+                                              false,
+                                              currVLengthY,
+                                              ndr_)
+             && getTech()->isVia2ViaForbiddenLen(gridZ,
+                                                 !(currGrid.isPrevViaUp()),
+                                                 !isCurrViaUp,
+                                                 true,
+                                                 currVLengthX,
+                                                 ndr_)) {
+    isForbiddenVia2Via = true;
   }
-  return FlexMazeIdx(gridX, gridY, gridZ);
+  return isForbiddenVia2Via;
 }
 
 bool FlexGridGraph::isExpandable(const FlexWavefrontGrid& currGrid,
@@ -682,12 +766,12 @@ bool FlexGridGraph::isExpandable(const FlexWavefrontGrid& currGrid,
   frMIdx gridZ = currGrid.z();
   bool hg = hasEdge(gridX, gridY, gridZ, dir);
   reverse(gridX, gridY, gridZ, dir);
-  if (!hg || isSrc(gridX, gridY, gridZ)
-      || (getPrevAstarNodeDir({gridX, gridY, gridZ}) != frDirEnum::UNKNOWN)
-      ||  // comment out for non-buffer enablement
-      currGrid.getLastDir() == dir) {
+  if (!hg || isSrc(gridX, gridY, gridZ)) {
     return false;
   }
+  auto idx = getIdx(gridX, gridY, gridZ);
+  if (visited_[idx])
+    return false;
   if (ndr_) {
     frCoord halfWidth
         = (frCoord) getTech()->getLayer(getLayerNum(currGrid.z()))->getWidth()
@@ -708,53 +792,51 @@ bool FlexGridGraph::isExpandable(const FlexWavefrontGrid& currGrid,
       }
     }
   }
-
+  // if ((dir == frDirEnum::U || dir == frDirEnum::D) &&
+  // isForbiddenVia(currGrid, dir))
+  //   return false;
   return true;
 }
 
-void FlexGridGraph::traceBackPath(const FlexWavefrontGrid& currGrid,
-                                  vector<FlexMazeIdx>& path,
-                                  vector<FlexMazeIdx>& root,
-                                  FlexMazeIdx& ccMazeIdx1,
-                                  FlexMazeIdx& ccMazeIdx2) const
+void FlexGridGraph::traceBackPath(
+    const std::shared_ptr<FlexWavefrontGrid>& currGridPtr,
+    vector<FlexMazeIdx>& path,
+    vector<FlexMazeIdx>& root,
+    FlexMazeIdx& ccMazeIdx1,
+    FlexMazeIdx& ccMazeIdx2) const
 {
-  frDirEnum prevDir = frDirEnum::UNKNOWN, currDir = frDirEnum::UNKNOWN;
+  auto currGrid = *currGridPtr;
   int currX = currGrid.x(), currY = currGrid.y(), currZ = currGrid.z();
-  // pop content in buffer
-  auto backTraceBuffer = currGrid.getBackTraceBuffer();
-  for (int i = 0; i < WAVEFRONTBUFFERSIZE; ++i) {
-    // current grid is src
-    if (isSrc(currX, currY, currZ)) {
-      break;
+
+  frDirEnum prevDir = frDirEnum::UNKNOWN;
+  frDirEnum currDir = frDirEnum::UNKNOWN;
+  auto parentGrid = currGridPtr;
+  while (parentGrid->getPrevGrid() != nullptr) {
+    // auto currIdx = getIdx(currX, currY, currZ);
+    parentGrid = parentGrid->getPrevGrid();
+    // auto parentMazeIdx = parent_[currIdx][0]->parent;
+    if (currX != parentGrid->x()) {
+      if (currX > parentGrid->x())
+        currDir = frDirEnum::E;
+      else
+        currDir = frDirEnum::W;
+    } else if (currY != parentGrid->y()) {
+      if (currY > parentGrid->y())
+        currDir = frDirEnum::N;
+      else
+        currDir = frDirEnum::S;
+    } else {
+      if (currZ > parentGrid->z())
+        currDir = frDirEnum::U;
+      else
+        currDir = frDirEnum::D;
     }
-    // get last direction
-    currDir = getLastDir(backTraceBuffer);
-    backTraceBuffer >>= DIRBITSIZE;
-    if (currDir == frDirEnum::UNKNOWN) {
-      cout << "Warning: unexpected direction in tracBackPath\n";
-      break;
-    }
-    root.push_back(FlexMazeIdx(currX, currY, currZ));
-    // push point to path
-    if (currDir != prevDir) {
+    if (currDir != prevDir)
       path.push_back(FlexMazeIdx(currX, currY, currZ));
-    }
-    getPrevGrid(currX, currY, currZ, currDir);
-    prevDir = currDir;
-  }
-  // trace back according to grid prev dir
-  while (isSrc(currX, currY, currZ) == false) {
-    // get last direction
-    currDir = getPrevAstarNodeDir({currX, currY, currZ});
-    root.push_back(FlexMazeIdx(currX, currY, currZ));
-    if (currDir == frDirEnum::UNKNOWN) {
-      cout << "Warning: unexpected direction in tracBackPath\n";
-      break;
-    }
-    if (currDir != prevDir) {
-      path.push_back(FlexMazeIdx(currX, currY, currZ));
-    }
-    getPrevGrid(currX, currY, currZ, currDir);
+
+    currX = parentGrid->x();
+    currY = parentGrid->y();
+    currZ = parentGrid->z();
     prevDir = currDir;
   }
   // add final path to src, only add when path exists; no path exists (src =
@@ -823,30 +905,27 @@ bool FlexGridGraph::search(vector<FlexMazeIdx>& connComps,
         std::numeric_limits<frCoord>::max(),
         currDist,
         0,
-        getEstCost(idx, dstMazeIdx1, dstMazeIdx2, frDirEnum::UNKNOWN));
+        getEstCost(idx, dstMazeIdx1, dstMazeIdx2, frDirEnum::UNKNOWN),
+        frDirEnum::UNKNOWN);
     if (ndr_ && AUTO_TAPER_NDR_NETS) {
       auto it = mazeIdx2TaperBox.find(idx);
       if (it != mazeIdx2TaperBox.end())
         currGrid.setSrcTaperBox(it->second);
     }
-    wavefront_.push(currGrid);
+    wavefront_.push(std::make_shared<FlexWavefrontGrid>(currGrid));
   }
   while (!wavefront_.empty()) {
     auto currGrid = wavefront_.top();
     wavefront_.pop();
-    if (getPrevAstarNodeDir({currGrid.x(), currGrid.y(), currGrid.z()})
-        != frDirEnum::UNKNOWN) {
-      continue;
-    }
     if (graphics_) {
-      graphics_->searchNode(this, currGrid);
+      graphics_->searchNode(this, *currGrid);
     }
     if (drWorker_->getDRIter() >= debugMazeIter)
-      cout << "Expanding " << currGrid.x() << " " << currGrid.y() << " "
-           << currGrid.z() << " coords: " << xCoords_[currGrid.x()] << " "
-           << yCoords_[currGrid.y()] << " cost " << currGrid.getCost() << " g "
-           << currGrid.getPathCost() << "\n";
-    if (isDst(currGrid.x(), currGrid.y(), currGrid.z())) {
+      cout << "Expanding " << currGrid->x() << " " << currGrid->y() << " "
+           << currGrid->z() << " coords: " << xCoords_[currGrid->x()] << " "
+           << yCoords_[currGrid->y()] << " cost " << currGrid->getCost()
+           << " g " << currGrid->getPathCost() << "\n";
+    if (isDst(currGrid->x(), currGrid->y(), currGrid->z())) {
       traceBackPath(currGrid, path, connComps, ccMazeIdx1, ccMazeIdx2);
       return true;
     } else {
