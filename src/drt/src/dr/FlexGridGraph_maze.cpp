@@ -124,8 +124,9 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
   auto tailDir = nextWavefrontGrid.shiftAddBuffer(dir);
   // non-buffer enablement is faster for ripup all
   // commit grid prev direction if needed
-  auto tailIdx = getTailIdx(nextIdx, nextWavefrontGrid);
+
   if (tailDir != frDirEnum::UNKNOWN) {
+    auto tailIdx = getTailIdx(nextIdx, nextWavefrontGrid);
     if (getPrevAstarNodeDir(tailIdx) == frDirEnum::UNKNOWN
         || getPrevAstarNodeDir(tailIdx) == tailDir) {
       setPrevAstarNodeDir(tailIdx.x(), tailIdx.y(), tailIdx.z(), tailDir);
@@ -241,13 +242,6 @@ frCost FlexGridGraph::getEstCost(const FlexMazeIdx& src,
   }
 
   return (minCostX + minCostY + minCostZ + bendCnt + forbiddenPenalty);
-}
-
-frDirEnum FlexGridGraph::getLastDir(
-    const std::bitset<WAVEFRONTBITSIZE>& buffer) const
-{
-  auto currDirVal = buffer.to_ulong() & 0b111u;
-  return static_cast<frDirEnum>(currDirVal);
 }
 
 void FlexGridGraph::getNextGrid(frMIdx& gridX,
@@ -668,12 +662,9 @@ FlexMazeIdx FlexGridGraph::getTailIdx(const FlexMazeIdx& currIdx,
   int gridY = currIdx.y();
   int gridZ = currIdx.z();
   auto backTraceBuffer = currGrid.getBackTraceBuffer();
-  for (int i = 0; i < WAVEFRONTBUFFERSIZE; ++i) {
-    int currDirVal
-        = backTraceBuffer.to_ulong()
-          - ((backTraceBuffer.to_ulong() >> DIRBITSIZE) << DIRBITSIZE);
-    frDirEnum currDir = static_cast<frDirEnum>(currDirVal);
-    backTraceBuffer >>= DIRBITSIZE;
+  while (!backTraceBuffer.empty()) {
+    auto currDir = backTraceBuffer.front();
+    backTraceBuffer.pop_front();
     getPrevGrid(gridX, gridY, gridZ, currDir);
   }
   return FlexMazeIdx(gridX, gridY, gridZ);
@@ -727,14 +718,14 @@ void FlexGridGraph::traceBackPath(const FlexWavefrontGrid& currGrid,
   int currX = currGrid.x(), currY = currGrid.y(), currZ = currGrid.z();
   // pop content in buffer
   auto backTraceBuffer = currGrid.getBackTraceBuffer();
-  for (int i = 0; i < WAVEFRONTBUFFERSIZE; ++i) {
+  while (!backTraceBuffer.empty()) {
     // current grid is src
     if (isSrc(currX, currY, currZ)) {
       break;
     }
     // get last direction
-    currDir = getLastDir(backTraceBuffer);
-    backTraceBuffer >>= DIRBITSIZE;
+    currDir = backTraceBuffer.front();
+    backTraceBuffer.pop_front();
     if (currDir == frDirEnum::UNKNOWN) {
       cout << "Warning: unexpected direction in tracBackPath\n";
       break;

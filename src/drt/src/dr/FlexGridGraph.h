@@ -1151,7 +1151,6 @@ class FlexGridGraph
                     const frDirEnum& dir) const;
   frCost getNextPathCost(const FlexWavefrontGrid& currGrid,
                          const frDirEnum& dir) const;
-  frDirEnum getLastDir(const std::bitset<WAVEFRONTBITSIZE>& buffer) const;
   void traceBackPath(const FlexWavefrontGrid& currGrid,
                      std::vector<FlexMazeIdx>& path,
                      std::vector<FlexMazeIdx>& root,

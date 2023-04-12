@@ -89,7 +89,7 @@ class FlexWavefrontGrid
                     frCoord distIn,
                     frCost pathCostIn,
                     frCost costIn,
-                    std::bitset<WAVEFRONTBITSIZE> backTraceBufferIn)
+                    std::deque<frDirEnum> backTraceBufferIn)
       : xIdx_(xIn),
         yIdx_(yIn),
         zIdx_(zIn),
@@ -126,10 +126,7 @@ class FlexWavefrontGrid
   frMIdx z() const { return zIdx_; }
   frCost getPathCost() const { return pathCost_; }
   frCost getCost() const { return cost_; }
-  std::bitset<WAVEFRONTBITSIZE> getBackTraceBuffer() const
-  {
-    return backTraceBuffer_;
-  }
+  std::deque<frDirEnum> getBackTraceBuffer() const { return backTraceBuffer_; }
   frCoord getLength() const { return vLengthX_; }
   void getVLength(frCoord& vLengthXIn, frCoord& vLengthYIn) const
   {
@@ -148,21 +145,22 @@ class FlexWavefrontGrid
   void setPrevViaUp(bool in) { prevViaUp_ = in; }
   frDirEnum getLastDir() const
   {
-    auto currDirVal = backTraceBuffer_.to_ulong() & 0b111u;
-    return static_cast<frDirEnum>(currDirVal);
+    if (backTraceBuffer_.empty())
+      return frDirEnum::UNKNOWN;
+    return backTraceBuffer_.front();
   }
   bool isBufferFull() const
   {
-    std::bitset<WAVEFRONTBITSIZE> mask = WAVEFRONTBUFFERHIGHMASK;
-    return (mask & backTraceBuffer_).any();
+    return backTraceBuffer_.size() == WAVEFRONTBUFFERSIZE;
   }
   frDirEnum shiftAddBuffer(const frDirEnum& dir)
   {
-    auto retBS = static_cast<frDirEnum>(
-        (backTraceBuffer_ >> (WAVEFRONTBITSIZE - DIRBITSIZE)).to_ulong());
-    backTraceBuffer_ <<= DIRBITSIZE;
-    std::bitset<WAVEFRONTBITSIZE> newBS = (unsigned) dir;
-    backTraceBuffer_ |= newBS;
+    frDirEnum retBS = frDirEnum::UNKNOWN;
+    if (isBufferFull()) {
+      retBS = backTraceBuffer_.back();
+      backTraceBuffer_.pop_back();
+    }
+    backTraceBuffer_.push_front(dir);
     return retBS;
   }
   void setSrcTaperBox(const frBox3D* b) { srcTaperBox = b; }
@@ -177,7 +175,7 @@ class FlexWavefrontGrid
   frCoord dist_;  // to maze center
   bool prevViaUp_;
   frCoord tLength_;  // length since last turn
-  std::bitset<WAVEFRONTBITSIZE> backTraceBuffer_;
+  std::deque<frDirEnum> backTraceBuffer_;
   const frBox3D* srcTaperBox = nullptr;
 };
 
