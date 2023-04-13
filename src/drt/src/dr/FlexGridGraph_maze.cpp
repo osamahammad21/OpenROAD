@@ -121,21 +121,9 @@ void FlexGridGraph::expand(FlexWavefrontGrid& currGrid,
           nextWavefrontGrid.x(), nextWavefrontGrid.y(), nextWavefrontGrid.z()))
     nextWavefrontGrid.setSrcTaperBox(currGrid.getSrcTaperBox());
   // update wavefront buffer
-  auto tailDir = nextWavefrontGrid.shiftAddBuffer(dir);
+  nextWavefrontGrid.shiftAddBuffer(dir);
   // non-buffer enablement is faster for ripup all
-  // commit grid prev direction if needed
-
-  if (tailDir != frDirEnum::UNKNOWN) {
-    auto tailIdx = getTailIdx(nextIdx, nextWavefrontGrid);
-    if (getPrevAstarNodeDir(tailIdx) == frDirEnum::UNKNOWN
-        || getPrevAstarNodeDir(tailIdx) == tailDir) {
-      setPrevAstarNodeDir(tailIdx.x(), tailIdx.y(), tailIdx.z(), tailDir);
-      wavefront_.push(nextWavefrontGrid);
-    }
-  } else {
-    // add to wavefront
-    wavefront_.push(nextWavefrontGrid);
-  }
+  wavefront_.push(nextWavefrontGrid);
   if (drWorker_->getDRIter() >= debugMazeIter)
     cout << "Creating " << nextWavefrontGrid.x() << " " << nextWavefrontGrid.y()
          << " " << nextWavefrontGrid.z()
@@ -151,8 +139,26 @@ void FlexGridGraph::expandWavefront(FlexWavefrontGrid& currGrid,
                                     const FlexMazeIdx& dstMazeIdx2,
                                     const Point& centerPt)
 {
+  bool firstExpansion = true;
   for (const auto dir : frDirEnumAll) {
     if (isExpandable(currGrid, dir)) {
+      if (firstExpansion) {
+        firstExpansion = false;
+        if (currGrid.isBufferFull()) {
+          auto buffer = currGrid.getBackTraceBuffer();
+          auto tailDir = buffer.back();
+          buffer.pop_back();
+          auto tailIdx
+              = getTailIdx({currGrid.x(), currGrid.y(), currGrid.z()}, buffer);
+          if (getPrevAstarNodeDir(tailIdx) == frDirEnum::UNKNOWN
+              || getPrevAstarNodeDir(tailIdx) == tailDir) {
+            setPrevAstarNodeDir(tailIdx.x(), tailIdx.y(), tailIdx.z(), tailDir);
+          } else {
+            // node already taken. do not expand.
+            return;
+          }
+        }
+      }
       expand(currGrid, dir, dstMazeIdx1, dstMazeIdx2, centerPt);
     }
   }
@@ -656,12 +662,12 @@ frMIdx FlexGridGraph::getUpperBoundIndex(const frVector<frCoord>& tracks,
 }
 
 FlexMazeIdx FlexGridGraph::getTailIdx(const FlexMazeIdx& currIdx,
-                                      const FlexWavefrontGrid& currGrid) const
+                                      const deque<frDirEnum>& buffer) const
 {
   int gridX = currIdx.x();
   int gridY = currIdx.y();
   int gridZ = currIdx.z();
-  auto backTraceBuffer = currGrid.getBackTraceBuffer();
+  auto backTraceBuffer = buffer;
   while (!backTraceBuffer.empty()) {
     auto currDir = backTraceBuffer.front();
     backTraceBuffer.pop_front();

@@ -1185,7 +1185,7 @@ class FlexGridGraph
                        const Point& centerPt);
   bool isExpandable(const FlexWavefrontGrid& currGrid, frDirEnum dir) const;
   FlexMazeIdx getTailIdx(const FlexMazeIdx& currIdx,
-                         const FlexWavefrontGrid& currGrid) const;
+                         const deque<frDirEnum>& currGrid) const;
   void expand(FlexWavefrontGrid& currGrid,
               const frDirEnum& dir,
               const FlexMazeIdx& dstMazeIdx1,
