@@ -903,6 +903,9 @@ class FlexGridGraph
         break;
     }
   }
+  void fillGuides(const bool value) {
+    std::fill(guides_.begin(), guides_.end(), value);
+  }
   void setGraphics(FlexDRGraphics* g) { graphics_ = g; }
 
   void setNDR(frNonDefaultRule* ndr) { ndr_ = ndr; }

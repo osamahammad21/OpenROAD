@@ -1651,6 +1651,9 @@ void FlexDRWorker::mazeNetInit(drNet* net)
   // route_queue does not need to reserve
   if (isFollowGuide()) {
     initMazeCost_guide_helper(net, true);
+  } else if (net->getFrNet()->hasJumpers()) {
+    gridGraph_.fillGuides(false);
+    initMazeCost_guide_helper(net, true);
   }
   // add minimum cut cost from objs in ext ring when the net is about to route
   initMazeCost_minCut_helper(net, true);
@@ -1664,6 +1667,8 @@ void FlexDRWorker::mazeNetEnd(drNet* net)
   initMazeCost_terms(net->getFrNetTerms(), true, true);
   if (isFollowGuide()) {
     initMazeCost_guide_helper(net, false);
+  } else if (net->getFrNet()->hasJumpers()) {
+    gridGraph_.fillGuides(true);
   }
   // sub minimum cut cost from vias in ext ring when the net is about to end
   initMazeCost_minCut_helper(net, false);
