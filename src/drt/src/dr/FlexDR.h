@@ -38,13 +38,13 @@
 #include "db/drObj/drMarker.h"
 #include "db/drObj/drNet.h"
 #include "db/infra/frTime.h"
+#include "db/infra/sqliteDB.h"
 #include "dr/FlexDR_graphics.h"
 #include "dr/FlexGridGraph.h"
 #include "dr/FlexWavefront.h"
 #include "dst/JobMessage.h"
 #include "frDesign.h"
 #include "gc/FlexGC.h"
-
 using Rectangle = boost::polygon::rectangle_data<int>;
 namespace dst {
 class Distributed;
@@ -177,6 +177,7 @@ class FlexDR
   bool increaseClipsize_;
   float clipSizeInc_;
   int iter_;
+  sqliteDB sql_db_;
 
   // others
   void initFromTA();

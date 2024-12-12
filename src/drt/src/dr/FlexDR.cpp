@@ -117,8 +117,20 @@ FlexDR::FlexDR(TritonRoute* router,
       dist_port_(0),
       increaseClipsize_(false),
       clipSizeInc_(0),
-      iter_(0)
+      iter_(0),
+      sql_db_(
+          loggerIn,
+          "runs.db",
+          dbIn->getTech()->getName() + "/" + designIn->getTopBlock()->getName())
 {
+  const auto area = getDesign()->getTopBlock()->getBBox().area()
+                    / (dbIn->getChip()->getBlock()->getDbUnitsPerMicron()
+                       * dbIn->getChip()->getBlock()->getDbUnitsPerMicron());
+  const auto gcell_cnt
+      = getDesign()->getTopBlock()->getGCellPatterns().at(0).getCount()
+        * getDesign()->getTopBlock()->getGCellPatterns().at(1).getCount();
+  const auto nets_cnt = getDesign()->getTopBlock()->getNets().size();
+  sql_db_.insertDesignEntry(area, gcell_cnt, nets_cnt);
 }
 
 FlexDR::~FlexDR() = default;
@@ -975,7 +987,7 @@ struct Wavefront
  * way we try to balance the resulting boxes so that each DRV box optimally has
  * the same number of expanded boxes.
  */
-std::vector<std::set<Rect>> expandBoxes(std::vector<Rect>& merged_boxes)
+std::vector<std::set<Rect>> expandBoxes(const std::vector<Rect>& merged_boxes)
 {
   frUInt4 min_x_idx = std::numeric_limits<frUInt4>::max();
   frUInt4 min_y_idx = std::numeric_limits<frUInt4>::max();
@@ -1115,6 +1127,29 @@ void FlexDR::stubbornTilesFlow(const SearchRepairArgs& args,
   if (graphics_) {
     graphics_->startIter(iter_, router_cfg_);
   }
+  std::set<Point> markers_gcells;
+  std::set<frNet*> marker_nets;
+  for (const auto& marker : getDesign()->getTopBlock()->getMarkers()) {
+    const auto box = marker->getBBox();
+    const Point min_idx = getDesign()->getTopBlock()->getGCellIdx(box.ll());
+    const Point max_idx = getDesign()->getTopBlock()->getGCellIdx(box.ur());
+    for (int x = min_idx.x(); x <= max_idx.x(); x++) {
+      for (int y = min_idx.y(); y <= max_idx.y(); y++) {
+        markers_gcells.insert({x, y});
+      }
+    }
+    for (auto src : marker->getSrcs()) {
+      if (src->typeId() != frcNet) {
+        continue;
+      }
+      auto net = static_cast<frNet*>(src);
+      if (net->isFixed() || net->isSpecial()) {
+        continue;
+      }
+      marker_nets.insert(net);
+    }
+  }
+
   std::vector<Rect> drv_boxes;
   for (const auto& marker : getDesign()->getTopBlock()->getMarkers()) {
     auto box = marker->getBBox();
@@ -1168,6 +1203,48 @@ void FlexDR::stubbornTilesFlow(const SearchRepairArgs& args,
         worker_best_result[worker_id] = worker.get();
       }
     }
+    ////
+    for (const auto& worker : batch) {
+      const int worker_id = worker->getWorkerId();
+      const bool chosen = worker_best_result[worker_id] == worker.get();
+      const int drv_cost_mult = worker->getWorkerDRCCost() / args.workerDRCCost;
+      const int marker_cost_mult
+          = worker->getWorkerMarkerCost() / args.workerMarkerCost;
+      std::string horizontal_offset, vertical_offset;
+      const auto route_box = worker->getRouteBox();
+      auto drv_box = merged_boxes[worker_id];
+      drv_box
+          = Rect(getDesign()->getTopBlock()->getGCellBox(drv_box.ll()).ll(),
+                 getDesign()->getTopBlock()->getGCellBox(drv_box.ur()).ur());
+      if (route_box.xMax() - drv_box.xMax()
+          > drv_box.xMin() - route_box.xMin()) {
+        horizontal_offset = "RIGHT";
+      } else if (route_box.xMax() - drv_box.xMax()
+                 < drv_box.xMin() - route_box.xMin()) {
+        horizontal_offset = "LEFT";
+      } else {
+        horizontal_offset = "CENTER";
+      }
+      if (route_box.yMax() - drv_box.yMax()
+          > drv_box.yMin() - route_box.yMin()) {
+        vertical_offset = "TOP";
+      } else if (route_box.yMax() - drv_box.yMax()
+                 < drv_box.yMin() - route_box.yMin()) {
+        vertical_offset = "BOTTOM";
+      } else {
+        vertical_offset = "CENTER";
+      }
+      sql_db_.insertWorkerEntry(iter_,
+                                worker_id,
+                                drv_cost_mult,
+                                marker_cost_mult,
+                                worker->getInitNumMarkers(),
+                                worker->getBestNumMarkers(),
+                                chosen,
+                                horizontal_offset,
+                                vertical_offset);
+    }
+    ////
     for (auto [_, worker] : worker_best_result) {
       changed
           |= (worker->end(getDesign())
@@ -1179,6 +1256,13 @@ void FlexDR::stubbornTilesFlow(const SearchRepairArgs& args,
     control_.skip_till_changed = true;
     control_.last_args = args;
   }
+  sql_db_.insertIterationEntry(iter_,
+                               getDesign()->getTopBlock()->getNumMarkers(),
+                               iter_prog.total_num_workers,
+                               merged_boxes.size(),
+                               markers_gcells.size(),
+                               marker_nets.size(),
+                               "STUBBORN");
 }
 
 void FlexDR::optimizationFlow(const SearchRepairArgs& args,
@@ -1186,6 +1270,28 @@ void FlexDR::optimizationFlow(const SearchRepairArgs& args,
 {
   if (graphics_) {
     graphics_->startIter(iter_, router_cfg_);
+  }
+  std::set<Point> markers_gcells;
+  std::set<frNet*> marker_nets;
+  for (const auto& marker : getDesign()->getTopBlock()->getMarkers()) {
+    const auto box = marker->getBBox();
+    const Point min_idx = getDesign()->getTopBlock()->getGCellIdx(box.ll());
+    const Point max_idx = getDesign()->getTopBlock()->getGCellIdx(box.ur());
+    for (int x = min_idx.x(); x <= max_idx.x(); x++) {
+      for (int y = min_idx.y(); y <= max_idx.y(); y++) {
+        markers_gcells.insert({x, y});
+      }
+    }
+    for (auto src : marker->getSrcs()) {
+      if (src->typeId() != frcNet) {
+        continue;
+      }
+      auto net = static_cast<frNet*>(src);
+      if (net->isFixed() || net->isSpecial()) {
+        continue;
+      }
+      marker_nets.insert(net);
+    }
   }
   auto gCellPatterns = getDesign()->getTopBlock()->getGCellPatterns();
   auto& xgp = gCellPatterns.at(0);
@@ -1195,7 +1301,7 @@ void FlexDR::optimizationFlow(const SearchRepairArgs& args,
   iter_prog.total_num_workers
       = (((int) xgp.getCount() - 1 - offset) / size + 1)
         * (((int) ygp.getCount() - 1 - offset) / size + 1);
-
+  uint tot_workers = 0;
   std::vector<std::unique_ptr<FlexDRWorker>> uworkers;
   int batchStepX, batchStepY;
 
@@ -1208,6 +1314,7 @@ void FlexDR::optimizationFlow(const SearchRepairArgs& args,
   for (int i = offset; i < (int) xgp.getCount(); i += size) {
     for (int j = offset; j < (int) ygp.getCount(); j += size) {
       auto worker = createWorker(i, j, args);
+      tot_workers++;
       int batch_idx = (xIdx % batchStepX) * batchStepY + yIdx % batchStepY;
       const bool create_new_batch
           = workers[batch_idx].empty()
@@ -1224,7 +1331,7 @@ void FlexDR::optimizationFlow(const SearchRepairArgs& args,
     yIdx = 0;
     xIdx++;
   }
-
+  int active_workers = 0;
   omp_set_num_threads(router_cfg_->MAX_THREADS);
   int version = 0;
   increaseClipsize_ = false;
@@ -1244,9 +1351,21 @@ void FlexDR::optimizationFlow(const SearchRepairArgs& args,
           processWorkersBatch(workersInBatch, iter_prog);
         }
       }
+      for (const auto& worker : workersInBatch) {
+        if (!worker->isSkipRouting()) {
+          active_workers++;
+        }
+      }
       endWorkersBatch(workersInBatch);
     }
-  }
+  };
+  sql_db_.insertIterationEntry(iter_,
+                               getDesign()->getTopBlock()->getNumMarkers(),
+                               tot_workers,
+                               active_workers,
+                               markers_gcells.size(),
+                               marker_nets.size(),
+                               "OPTIMIZATION");
 
   if (!iter_) {
     removeGCell2BoundaryPin();

@@ -49,6 +49,8 @@ check_ipo_supported(RESULT ipo_supported OUTPUT error)
 find_package(Boost REQUIRED COMPONENTS serialization)
 find_package(OpenMP REQUIRED)
 find_package(VTune)
+find_package(SQLite3 REQUIRED)
+
 
 swig_lib(NAME      drt
          NAMESPACE drt
@@ -102,6 +104,7 @@ target_sources(drt
     src/db/infra/frTime_helper.cpp
     src/db/infra/frTime.cpp
     src/db/infra/KDTree.cpp
+    src/db/infra/sqliteDB.cpp
     src/db/taObj/taShape.cpp
     src/db/obj/frShape.cpp
     src/db/obj/frInst.cpp
@@ -142,6 +145,7 @@ target_include_directories(drt
 
   PRIVATE
     src
+    ${SQLite3_INCLUDE_DIRS}
 )
 
 target_link_libraries(drt
@@ -157,6 +161,7 @@ target_link_libraries(drt
     OpenMP::OpenMP_CXX
     ${Boost_LIBRARIES}
     ZLIB::ZLIB
+    SQLite::SQLite3
 )
 
 messages(
