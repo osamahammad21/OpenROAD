@@ -55,7 +55,6 @@ class dbIntProperty;
 class dbDoubleProperty;
 
 // Design objects
-class dbChip;
 class dbBlock;
 class dbBTerm;
 class dbNet;
@@ -107,6 +106,7 @@ class dbViaParams;
 class dbAccessPoint;
 class dbBusPort;
 class dbCellEdgeSpacing;
+class dbChip;
 class dbDft;
 class dbGCellGrid;
 class dbGDSARef;
@@ -716,38 +716,6 @@ class dbSBox : public dbBox
   /// Destroy a SBox.
   ///
   static void destroy(dbSBox* box);
-};
-
-///////////////////////////////////////////////////////////////////////////////
-///
-/// A Chip is the element the represents a VLSI/ASIC IC.
-///
-///////////////////////////////////////////////////////////////////////////////
-class dbChip : public dbObject
-{
- public:
-  ///
-  /// Get the top-block of this chip.
-  /// Returns nullptr if a top-block has NOT been created.
-  ///
-  dbBlock* getBlock();
-
-  ///
-  /// Create a new chip.
-  /// Returns nullptr if a chip already exists.
-  /// Returns nullptr if there is no database technology.
-  ///
-  static dbChip* create(dbDatabase* db);
-
-  ///
-  /// Translate a database-id back to a pointer.
-  ///
-  static dbChip* getChip(dbDatabase* db, uint oid);
-
-  ///
-  /// Destroy a chip.
-  ///
-  static void destroy(dbChip* chip);
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -7129,6 +7097,35 @@ class dbCellEdgeSpacing : public dbObject
   static void destroy(dbCellEdgeSpacing*);
 
   // User Code End dbCellEdgeSpacing
+};
+
+class dbChip : public dbObject
+{
+ public:
+  // User Code Begin dbChip
+  ///
+  /// Get the top-block of this chip.
+  /// Returns nullptr if a top-block has NOT been created.
+  ///
+  dbBlock* getBlock();
+
+  ///
+  /// Create a new chip.
+  /// Returns nullptr if a chip already exists.
+  /// Returns nullptr if there is no database technology.
+  ///
+  static dbChip* create(dbDatabase* db);
+
+  ///
+  /// Translate a database-id back to a pointer.
+  ///
+  static dbChip* getChip(dbDatabase* db, uint oid);
+
+  ///
+  /// Destroy a chip.
+  ///
+  static void destroy(dbChip* chip);
+  // User Code End dbChip
 };
 
 // Top level DFT (Design for Testing) class

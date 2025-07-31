@@ -103,15 +103,6 @@ struct less<odb::dbSBox*>
 };
 
 template <>
-struct less<odb::dbChip*>
-{
-  bool operator()(const odb::dbChip* lhs, const odb::dbChip* rhs) const
-  {
-    return odb::compare_by_id(lhs, rhs);
-  }
-};
-
-template <>
 struct less<odb::dbBlock*>
 {
   bool operator()(const odb::dbBlock* lhs, const odb::dbBlock* rhs) const
@@ -483,6 +474,15 @@ struct less<odb::dbCellEdgeSpacing*>
 {
   bool operator()(const odb::dbCellEdgeSpacing* lhs,
                   const odb::dbCellEdgeSpacing* rhs) const
+  {
+    return odb::compare_by_id(lhs, rhs);
+  }
+};
+
+template <>
+struct less<odb::dbChip*>
+{
+  bool operator()(const odb::dbChip* lhs, const odb::dbChip* rhs) const
   {
     return odb::compare_by_id(lhs, rhs);
   }

@@ -28,7 +28,6 @@ dbObjectType dbObject::getObjectType() const
 static const char* name_tbl[] = {"dbDatabase",
 
                                  // Design Objects
-                                 "dbChip",
                                  "dbGDSLib",
                                  "dbBlock",
                                  "dbInstHdr",
@@ -56,6 +55,7 @@ static const char* name_tbl[] = {"dbDatabase",
                                  "dbAccessPoint",
                                  "dbBusPort",
                                  "dbCellEdgeSpacing",
+                                 "dbChip",
                                  "dbDft",
                                  "dbGCellGrid",
                                  "dbGDSARef",

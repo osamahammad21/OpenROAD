@@ -1,0 +1,44 @@
+{
+  "name": "dbChip",
+  "type": "dbObject",
+  "ostream_scope": true,
+  "fields": [
+    {
+      "name": "_top",
+      "type": "dbId<_dbBlock>",
+      "flags": ["private", "cmpgt"],
+      "parent": "dbBlock"
+    },
+    {
+      "name": "_block_tbl",
+      "type": "dbTable<_dbBlock>*",
+      "flags": ["private", "no-serial"]
+    },
+    {
+      "name": "_name_cache",
+      "type": "_dbNameCache*",
+      "flags": ["private", "no-cmp", "no-serial"]
+    },
+    {
+      "name": "_block_itr",
+      "type": "dbBlockItr*", 
+      "flags": ["private", "no-cmp", "no-serial"]
+    },
+    {
+      "name": "_prop_itr",
+      "type": "dbPropertyItr*",
+      "flags": ["private", "no-cmp", "no-serial"]
+    }
+  ],
+  "declared_classes": ["dbPropertyItr", "_dbNameCache","dbBlockItr"],
+  "h_includes": [],
+  "cpp_includes": [
+    "dbTable.h",
+    "dbTable.hpp",
+    "dbNameCache.h",
+    "dbBlockItr.h", 
+    "dbBlock.h", 
+    "dbTech.h", 
+    "dbPropertyItr.h"
+  ]
+} 

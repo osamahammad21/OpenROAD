@@ -34,7 +34,6 @@ enum dbObjectType
   dbDatabaseObj,
 
   // Design Objects
-  dbChipObj,
   dbGdsLibObj,
   dbBlockObj,
   dbInstHdrObj,
@@ -62,6 +61,7 @@ enum dbObjectType
   dbAccessPointObj,
   dbBusPortObj,
   dbCellEdgeSpacingObj,
+  dbChipObj,
   dbDftObj,
   dbGCellGridObj,
   dbGDSARefObj,

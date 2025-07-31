@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 // Copyright (c) 2019-2025, The OpenROAD Authors
 
+// Generator Code Begin Cpp
 #include "dbChip.h"
 
 #include "dbBlock.h"
@@ -13,9 +14,8 @@
 #include "dbTable.hpp"
 #include "dbTech.h"
 #include "odb/db.h"
-
+#include "odb/dbSet.h"
 namespace odb {
-
 template class dbTable<_dbChip>;
 
 bool _dbChip::operator==(const _dbChip& rhs) const
@@ -23,83 +23,105 @@ bool _dbChip::operator==(const _dbChip& rhs) const
   if (_top != rhs._top) {
     return false;
   }
-
-  if (*_block_tbl != *rhs._block_tbl) {
-    return false;
-  }
-
   if (*_prop_tbl != *rhs._prop_tbl) {
     return false;
   }
 
+  // User Code Begin ==
+  if (*_block_tbl != *rhs._block_tbl) {
+    return false;
+  }
   if (*_name_cache != *rhs._name_cache) {
+    return false;
+  }
+  // User Code End ==
+  return true;
+}
+
+bool _dbChip::operator<(const _dbChip& rhs) const
+{
+  if (_top >= rhs._top) {
     return false;
   }
 
   return true;
 }
 
-////////////////////////////////////////////////////////////////////
-//
-// _dbChip - Methods
-//
-////////////////////////////////////////////////////////////////////
-
 _dbChip::_dbChip(_dbDatabase* db)
 {
-  _block_tbl = new dbTable<_dbBlock>(
-      db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbBlockObj);
-
   _prop_tbl = new dbTable<_dbProperty>(
       db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbPropertyObj);
-
+  // User Code Begin Constructor
+  _block_tbl = new dbTable<_dbBlock>(
+      db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbBlockObj);
   _name_cache
       = new _dbNameCache(db, this, (GetObjTbl_t) &_dbChip::getObjectTable);
 
   _block_itr = new dbBlockItr(_block_tbl);
 
   _prop_itr = new dbPropertyItr(_prop_tbl);
+  // User Code End Constructor
 }
 
-_dbChip::~_dbChip()
+dbIStream& operator>>(dbIStream& stream, _dbChip& obj)
 {
-  delete _block_tbl;
-  delete _prop_tbl;
-  delete _name_cache;
-  delete _block_itr;
-  delete _prop_itr;
-}
-
-dbOStream& operator<<(dbOStream& stream, const _dbChip& chip)
-{
-  dbOStreamScope scope(stream, "dbChip");
-  stream << chip._top;
-  stream << *chip._block_tbl;
-  stream << NamedTable("prop_tbl", chip._prop_tbl);
-  stream << *chip._name_cache;
+  stream >> obj._top;
+  // User Code Begin >>
+  stream >> *obj._block_tbl;
+  stream >> *obj._prop_tbl;
+  stream >> *obj._name_cache;
+  // User Code End >>
   return stream;
 }
 
-dbIStream& operator>>(dbIStream& stream, _dbChip& chip)
+dbOStream& operator<<(dbOStream& stream, const _dbChip& obj)
 {
-  stream >> chip._top;
-  stream >> *chip._block_tbl;
-  stream >> *chip._prop_tbl;
-  stream >> *chip._name_cache;
-
+  dbOStreamScope scope(stream, "dbChip");
+  stream << obj._top;
+  // User Code Begin <<
+  stream << *obj._block_tbl;
+  stream << NamedTable("prop_tbl", obj._prop_tbl);
+  stream << *obj._name_cache;
+  // User Code End <<
   return stream;
 }
 
 dbObjectTable* _dbChip::getObjectTable(dbObjectType type)
 {
-  if (type == dbBlockObj) {
-    return _block_tbl;
+  switch (type) {
+    case dbPropertyObj:
+      return _prop_tbl;
+      // User Code Begin getObjectTable
+    case dbBlockObj:
+      return _block_tbl;
+    // User Code End getObjectTable
+    default:
+      break;
   }
-  if (type == dbPropertyObj) {
-    return _prop_tbl;
-  }
-
   return getTable()->getObjectTable(type);
+}
+void _dbChip::collectMemInfo(MemInfo& info)
+{
+  info.cnt++;
+  info.size += sizeof(*this);
+
+  _prop_tbl->collectMemInfo(info.children_["_prop_tbl"]);
+
+  // User Code Begin collectMemInfo
+  _block_tbl->collectMemInfo(info.children_["block"]);
+  _name_cache->collectMemInfo(info.children_["name_cache"]);
+  // User Code End collectMemInfo
+}
+
+_dbChip::~_dbChip()
+{
+  delete _prop_tbl;
+  // User Code Begin Destructor
+  delete _block_tbl;
+  delete _name_cache;
+  delete _block_itr;
+  delete _prop_itr;
+  // User Code End Destructor
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -108,6 +130,7 @@ dbObjectTable* _dbChip::getObjectTable(dbObjectType type)
 //
 ////////////////////////////////////////////////////////////////////
 
+// User Code Begin dbChipPublicMethods
 dbBlock* dbChip::getBlock()
 {
   _dbChip* chip = (_dbChip*) this;
@@ -146,15 +169,6 @@ void dbChip::destroy(dbChip* chip_)
   db->_chip_tbl->destroy(chip);
   db->_chip = 0;
 }
-
-void _dbChip::collectMemInfo(MemInfo& info)
-{
-  info.cnt++;
-  info.size += sizeof(*this);
-
-  _block_tbl->collectMemInfo(info.children_["block"]);
-  _prop_tbl->collectMemInfo(info.children_["prop"]);
-  _name_cache->collectMemInfo(info.children_["name_cache"]);
-}
-
+// User Code End dbChipPublicMethods
 }  // namespace odb
+// Generator Code End Cpp
