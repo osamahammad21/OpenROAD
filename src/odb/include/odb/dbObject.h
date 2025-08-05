@@ -62,6 +62,7 @@ enum dbObjectType
   dbBusPortObj,
   dbCellEdgeSpacingObj,
   dbChipObj,
+  dbChipInstObj,
   dbDftObj,
   dbGCellGridObj,
   dbGDSARefObj,

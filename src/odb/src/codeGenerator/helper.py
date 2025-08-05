@@ -3,6 +3,7 @@
 
 _comparable = [
     "Point",
+    "Point3D",
     "Rect",
     "Polygon",
     "Line",

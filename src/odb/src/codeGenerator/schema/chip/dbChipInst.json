@@ -1,0 +1,27 @@
+{
+  "name": "dbChipInst",
+  "type": "dbObject",
+  "fields": [
+    {
+      "name": "name_",
+      "type": "std::string",
+      "flags":["cmpgt"]
+    },
+    {
+      "name": "loc_",
+      "type": "Point3D",
+      "flags":["cmpgt"]
+    },
+    {
+      "name": "orient_",
+      "type": "uint",
+      "default": 0,
+      "flags": ["private" ,"cmpgt"]
+    }
+  ],
+  "h_includes": [
+    "odb/geom.h",
+    "odb/dbTypes.h"
+  ],
+  "cpp_includes": []
+}

@@ -90,6 +90,7 @@ add_library(db
     dbBusPort.cpp
     dbCellEdgeSpacing.cpp
     dbChip.cpp
+    dbChipInst.cpp
     dbDft.cpp
     dbGCellGrid.cpp
     dbGDSARef.cpp

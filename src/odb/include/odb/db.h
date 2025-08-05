@@ -107,6 +107,7 @@ class dbAccessPoint;
 class dbBusPort;
 class dbCellEdgeSpacing;
 class dbChip;
+class dbChipInst;
 class dbDft;
 class dbGCellGrid;
 class dbGDSARef;
@@ -7102,6 +7103,75 @@ class dbCellEdgeSpacing : public dbObject
 class dbChip : public dbObject
 {
  public:
+  enum class ChipType
+  {
+    DIE,
+    RDL,
+    IP,
+    SUBSTRATE,
+    HIER
+  };
+
+  std::string getName() const;
+
+  void setOffset(Point offset);
+
+  Point getOffset() const;
+
+  void setWidth(int width);
+
+  int getWidth() const;
+
+  void setHeight(int height);
+
+  int getHeight() const;
+
+  void setThickness(int thickness);
+
+  int getThickness() const;
+
+  void setShrink(float shrink);
+
+  float getShrink() const;
+
+  void setSealRingEast(int seal_ring_east);
+
+  int getSealRingEast() const;
+
+  void setSealRingWest(int seal_ring_west);
+
+  int getSealRingWest() const;
+
+  void setSealRingNorth(int seal_ring_north);
+
+  int getSealRingNorth() const;
+
+  void setSealRingSouth(int seal_ring_south);
+
+  int getSealRingSouth() const;
+
+  void setScribeLineEast(int scribe_line_east);
+
+  int getScribeLineEast() const;
+
+  void setScribeLineWest(int scribe_line_west);
+
+  int getScribeLineWest() const;
+
+  void setScribeLineNorth(int scribe_line_north);
+
+  int getScribeLineNorth() const;
+
+  void setScribeLineSouth(int scribe_line_south);
+
+  int getScribeLineSouth() const;
+
+  void setTsv(bool tsv);
+
+  bool isTsv() const;
+
+  dbSet<dbChipInst> getChipInsts() const;
+
   // User Code Begin dbChip
   ///
   /// Get the top-block of this chip.
@@ -7126,6 +7196,18 @@ class dbChip : public dbObject
   ///
   static void destroy(dbChip* chip);
   // User Code End dbChip
+};
+
+class dbChipInst : public dbObject
+{
+ public:
+  void setName(const std::string& name);
+
+  std::string getName() const;
+
+  void setLoc(Point3D loc);
+
+  Point3D getLoc() const;
 };
 
 // Top level DFT (Design for Testing) class
