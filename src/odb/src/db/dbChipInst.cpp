@@ -6,13 +6,16 @@
 
 #include <string>
 
+#include "dbChipRegionInst.h"
 #include "dbDatabase.h"
 #include "dbTable.h"
 #include "dbTable.hpp"
 #include "odb/db.h"
-
+#include "odb/dbSet.h"
 // User Code Begin Includes
 #include "dbChip.h"
+#include "dbChipRegion.h"
+#include "dbChipRegionInst.h"
 #include "odb/dbTransform.h"
 #include "odb/dbTypes.h"
 // User Code End Includes
@@ -28,6 +31,9 @@ bool _dbChipInst::operator==(const _dbChipInst& rhs) const
     return false;
   }
   if (master_chip_ != rhs.master_chip_) {
+    return false;
+  }
+  if (*chip_region_inst_tbl_ != *rhs.chip_region_inst_tbl_) {
     return false;
   }
 
@@ -61,6 +67,11 @@ bool _dbChipInst::operator<(const _dbChipInst& rhs) const
 
 _dbChipInst::_dbChipInst(_dbDatabase* db)
 {
+  chip_region_inst_tbl_ = new dbTable<_dbChipRegionInst>(
+      db,
+      this,
+      (GetObjTbl_t) &_dbChipInst::getObjectTable,
+      dbChipRegionInstObj);
 }
 
 dbIStream& operator>>(dbIStream& stream, _dbChipInst& obj)
@@ -68,6 +79,7 @@ dbIStream& operator>>(dbIStream& stream, _dbChipInst& obj)
   stream >> obj.name_;
   stream >> obj.loc_;
   stream >> obj.master_chip_;
+  stream >> *obj.chip_region_inst_tbl_;
   // User Code Begin >>
   uint8_t orient;
   stream >> orient;
@@ -81,6 +93,7 @@ dbOStream& operator<<(dbOStream& stream, const _dbChipInst& obj)
   stream << obj.name_;
   stream << obj.loc_;
   stream << obj.master_chip_;
+  stream << *obj.chip_region_inst_tbl_;
   // User Code Begin <<
   uint8_t orient = static_cast<uint8_t>(obj.orient_);
   stream << orient;
@@ -88,10 +101,28 @@ dbOStream& operator<<(dbOStream& stream, const _dbChipInst& obj)
   return stream;
 }
 
+dbObjectTable* _dbChipInst::getObjectTable(dbObjectType type)
+{
+  switch (type) {
+    case dbChipRegionInstObj:
+      return chip_region_inst_tbl_;
+    default:
+      break;
+  }
+  return getTable()->getObjectTable(type);
+}
 void _dbChipInst::collectMemInfo(MemInfo& info)
 {
   info.cnt++;
   info.size += sizeof(*this);
+
+  chip_region_inst_tbl_->collectMemInfo(
+      info.children_["chip_region_inst_tbl_"]);
+}
+
+_dbChipInst::~_dbChipInst()
+{
+  delete chip_region_inst_tbl_;
 }
 
 ////////////////////////////////////////////////////////////////////
@@ -99,13 +130,6 @@ void _dbChipInst::collectMemInfo(MemInfo& info)
 // dbChipInst - Methods
 //
 ////////////////////////////////////////////////////////////////////
-
-void dbChipInst::setName(const std::string& name)
-{
-  _dbChipInst* obj = (_dbChipInst*) this;
-
-  obj->name_ = name;
-}
 
 std::string dbChipInst::getName() const
 {
@@ -124,6 +148,12 @@ Point3D dbChipInst::getLoc() const
 {
   _dbChipInst* obj = (_dbChipInst*) this;
   return obj->loc_;
+}
+
+dbSet<dbChipRegionInst> dbChipInst::getChipRegionInsts() const
+{
+  _dbChipInst* obj = (_dbChipInst*) this;
+  return dbSet<dbChipRegionInst>(obj, obj->chip_region_inst_tbl_);
 }
 
 // User Code Begin dbChipInstPublicMethods
@@ -167,16 +197,25 @@ dbChipInst* dbChipInst::create(dbChip* parent,
 {
   _dbChip* _master = (_dbChip*) master;
   _dbChip* _parent = (_dbChip*) parent;
-  _dbChipInst* inst = _parent->chip_inst_tbl_->create();
-  inst->name_ = name;
-  inst->master_chip_ = _master->getOID();
-  return (dbChipInst*) inst;
+  _dbChipInst* _inst = _parent->chip_inst_tbl_->create();
+  _inst->name_ = name;
+  _inst->master_chip_ = _master->getOID();
+  for (auto region : master->getChipRegions()) {
+    _dbChipRegionInst* region_inst = _inst->chip_region_inst_tbl_->create();
+    region_inst->region_ = region->getImpl()->getOID();
+  }
+  return (dbChipInst*) _inst;
 }
 
 void dbChipInst::destroy(dbChipInst* chip_inst)
 {
-  _dbChip* chip = (_dbChip*) chip_inst->getParentChip();
-  chip->chip_inst_tbl_->destroy((_dbChipInst*) chip_inst);
+  _dbChipInst* _chip_inst = (_dbChipInst*) chip_inst;
+  _dbChip* _chip = (_dbChip*) chip_inst->getParentChip();
+  for (auto region_inst : chip_inst->getChipRegionInsts()) {
+    _chip_inst->chip_region_inst_tbl_->destroy(
+        (_dbChipRegionInst*) region_inst);
+  }
+  _chip->chip_inst_tbl_->destroy(_chip_inst);
 }
 // User Code End dbChipInstPublicMethods
 }  // namespace odb

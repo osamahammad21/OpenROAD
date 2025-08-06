@@ -109,6 +109,7 @@ class dbCellEdgeSpacing;
 class dbChip;
 class dbChipInst;
 class dbChipRegion;
+class dbChipRegionInst;
 class dbDft;
 class dbGCellGrid;
 class dbGDSARef;
@@ -7204,13 +7205,13 @@ class dbChip : public dbObject
 class dbChipInst : public dbObject
 {
  public:
-  void setName(const std::string& name);
-
   std::string getName() const;
 
   void setLoc(Point3D loc);
 
   Point3D getLoc() const;
+
+  dbSet<dbChipRegionInst> getChipRegionInsts() const;
 
   // User Code Begin dbChipInst
   void setOrient(dbOrientType orient);
@@ -7262,6 +7263,16 @@ class dbChipRegion : public dbObject
 
   static void destroy(dbChipRegion* chip_region);
   // User Code End dbChipRegion
+};
+
+class dbChipRegionInst : public dbObject
+{
+ public:
+  // User Code Begin dbChipRegionInst
+  dbChipRegion* getChipRegion() const;
+
+  dbChipInst* getChipInst() const;
+  // User Code End dbChipRegionInst
 };
 
 // Top level DFT (Design for Testing) class

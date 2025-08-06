@@ -92,6 +92,7 @@ add_library(db
     dbChip.cpp
     dbChipInst.cpp
     dbChipRegion.cpp
+    dbChipRegionInst.cpp
     dbDft.cpp
     dbGCellGrid.cpp
     dbGDSARef.cpp

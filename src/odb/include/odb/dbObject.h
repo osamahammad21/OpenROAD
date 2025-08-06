@@ -64,6 +64,7 @@ enum dbObjectType
   dbChipObj,
   dbChipInstObj,
   dbChipRegionObj,
+  dbChipRegionInstObj,
   dbDftObj,
   dbGCellGridObj,
   dbGDSARefObj,

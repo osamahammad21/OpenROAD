@@ -1,0 +1,20 @@
+{
+    "name": "dbChipRegionInst",
+    "type": "dbObject",
+    "fields": [
+        {
+            "name": "region_",
+            "type": "dbId<_dbChipRegion>",
+            "flags": [
+                "private",
+                "cmpgt"
+            ]
+        }
+    ],
+    "h_includes": [
+        "odb/dbId.h"
+    ],
+    "cpp_includes": [
+        "dbChipRegion.h"
+    ]
+}
