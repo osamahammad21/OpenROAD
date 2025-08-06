@@ -498,6 +498,16 @@ struct less<odb::dbChipInst*>
 };
 
 template <>
+struct less<odb::dbChipRegion*>
+{
+  bool operator()(const odb::dbChipRegion* lhs,
+                  const odb::dbChipRegion* rhs) const
+  {
+    return odb::compare_by_id(lhs, rhs);
+  }
+};
+
+template <>
 struct less<odb::dbDft*>
 {
   bool operator()(const odb::dbDft* lhs, const odb::dbDft* rhs) const

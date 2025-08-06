@@ -108,6 +108,7 @@ class dbBusPort;
 class dbCellEdgeSpacing;
 class dbChip;
 class dbChipInst;
+class dbChipRegion;
 class dbDft;
 class dbGCellGrid;
 class dbGDSARef;
@@ -7172,6 +7173,8 @@ class dbChip : public dbObject
 
   dbSet<dbChipInst> getChipInsts() const;
 
+  dbSet<dbChipRegion> getChipRegions() const;
+
   // User Code Begin dbChip
   ///
   /// Get the top-block of this chip.
@@ -7208,6 +7211,39 @@ class dbChipInst : public dbObject
   void setLoc(Point3D loc);
 
   Point3D getLoc() const;
+};
+
+class dbChipRegion : public dbObject
+{
+ public:
+  enum class Side
+  {
+    FRONT,
+    BACK,
+    INTERNAL,
+    INTERNAL_EXT
+  };
+
+  std::string getName() const;
+
+  void setBox(Rect box);
+
+  Rect getBox() const;
+
+  // User Code Begin dbChipRegion
+
+  Side getSide() const;
+
+  dbChip* getChip() const;
+
+  dbTechLayer* getLayer() const;
+
+  void setLayer(dbTechLayer* layer);
+
+  static dbChipRegion* create(dbChip* chip, const std::string& name, Side side);
+
+  static void destroy(dbChipRegion* chip_region);
+  // User Code End dbChipRegion
 };
 
 // Top level DFT (Design for Testing) class

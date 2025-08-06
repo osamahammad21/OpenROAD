@@ -378,6 +378,13 @@
       "type":"1_n",
       "tbl_name":"chip_inst_tbl_",
       "schema":"db_schema_chip_extended"
+    },
+    {
+      "parent":"dbChip",
+      "child":"dbChipRegion",
+      "type":"1_n",
+      "tbl_name":"chip_region_tbl_",
+      "schema":"db_schema_chip_extended"
     }
   ]
 }

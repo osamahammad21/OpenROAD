@@ -91,6 +91,7 @@ add_library(db
     dbCellEdgeSpacing.cpp
     dbChip.cpp
     dbChipInst.cpp
+    dbChipRegion.cpp
     dbDft.cpp
     dbGCellGrid.cpp
     dbGDSARef.cpp

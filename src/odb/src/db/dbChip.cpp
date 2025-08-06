@@ -9,6 +9,7 @@
 #include "dbBlock.h"
 #include "dbBlockItr.h"
 #include "dbChipInst.h"
+#include "dbChipRegion.h"
 #include "dbDatabase.h"
 #include "dbNameCache.h"
 #include "dbProperty.h"
@@ -80,6 +81,9 @@ bool _dbChip::operator==(const _dbChip& rhs) const
   if (*chip_inst_tbl_ != *rhs.chip_inst_tbl_) {
     return false;
   }
+  if (*chip_region_tbl_ != *rhs.chip_region_tbl_) {
+    return false;
+  }
 
   // User Code Begin ==
   if (*_block_tbl != *rhs._block_tbl) {
@@ -122,6 +126,8 @@ _dbChip::_dbChip(_dbDatabase* db)
       db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbPropertyObj);
   chip_inst_tbl_ = new dbTable<_dbChipInst>(
       db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbChipInstObj);
+  chip_region_tbl_ = new dbTable<_dbChipRegion>(
+      db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbChipRegionObj);
   // User Code Begin Constructor
   _block_tbl = new dbTable<_dbBlock>(
       db, this, (GetObjTbl_t) &_dbChip::getObjectTable, dbBlockObj);
@@ -188,6 +194,9 @@ dbIStream& operator>>(dbIStream& stream, _dbChip& obj)
   if (obj.getDatabase()->isSchema(db_schema_chip_extended)) {
     stream >> *obj.chip_inst_tbl_;
   }
+  if (obj.getDatabase()->isSchema(db_schema_chip_extended)) {
+    stream >> *obj.chip_region_tbl_;
+  }
   // User Code Begin >>
   stream >> *obj._block_tbl;
   stream >> *obj._prop_tbl;
@@ -217,6 +226,7 @@ dbOStream& operator<<(dbOStream& stream, const _dbChip& obj)
   stream << obj.tsv_;
   stream << obj._top;
   stream << *obj.chip_inst_tbl_;
+  stream << *obj.chip_region_tbl_;
   // User Code Begin <<
   stream << *obj._block_tbl;
   stream << NamedTable("prop_tbl", obj._prop_tbl);
@@ -232,6 +242,8 @@ dbObjectTable* _dbChip::getObjectTable(dbObjectType type)
       return _prop_tbl;
     case dbChipInstObj:
       return chip_inst_tbl_;
+    case dbChipRegionObj:
+      return chip_region_tbl_;
       // User Code Begin getObjectTable
     case dbBlockObj:
       return _block_tbl;
@@ -250,6 +262,8 @@ void _dbChip::collectMemInfo(MemInfo& info)
 
   chip_inst_tbl_->collectMemInfo(info.children_["chip_inst_tbl_"]);
 
+  chip_region_tbl_->collectMemInfo(info.children_["chip_region_tbl_"]);
+
   // User Code Begin collectMemInfo
   _block_tbl->collectMemInfo(info.children_["block"]);
   _name_cache->collectMemInfo(info.children_["name_cache"]);
@@ -260,6 +274,7 @@ _dbChip::~_dbChip()
 {
   delete _prop_tbl;
   delete chip_inst_tbl_;
+  delete chip_region_tbl_;
   // User Code Begin Destructor
   delete _block_tbl;
   delete _name_cache;
@@ -466,6 +481,12 @@ dbSet<dbChipInst> dbChip::getChipInsts() const
 {
   _dbChip* obj = (_dbChip*) this;
   return dbSet<dbChipInst>(obj, obj->chip_inst_tbl_);
+}
+
+dbSet<dbChipRegion> dbChip::getChipRegions() const
+{
+  _dbChip* obj = (_dbChip*) this;
+  return dbSet<dbChipRegion>(obj, obj->chip_region_tbl_);
 }
 
 // User Code Begin dbChipPublicMethods
