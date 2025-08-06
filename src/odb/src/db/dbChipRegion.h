@@ -17,7 +17,6 @@ class dbIStream;
 class dbOStream;
 class _dbDatabase;
 class _dbTechLayer;
-class _dbTech;
 
 class _dbChipRegion : public _dbObject
 {
@@ -32,7 +31,6 @@ class _dbChipRegion : public _dbObject
   std::string name_;
   uint8_t side_;
   dbId<_dbTechLayer> layer_;
-  dbId<_dbTech> tech_;
   Rect box_;
 };
 dbIStream& operator>>(dbIStream& stream, _dbChipRegion& obj);

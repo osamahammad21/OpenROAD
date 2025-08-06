@@ -29,15 +29,10 @@ bool _dbChipRegion::operator==(const _dbChipRegion& rhs) const
   if (layer_ != rhs.layer_) {
     return false;
   }
-  if (tech_ != rhs.tech_) {
-    return false;
-  }
   if (box_ != rhs.box_) {
     return false;
   }
 
-  // User Code Begin ==
-  // User Code End ==
   return true;
 }
 
@@ -52,22 +47,15 @@ bool _dbChipRegion::operator<(const _dbChipRegion& rhs) const
   if (layer_ >= rhs.layer_) {
     return false;
   }
-  if (tech_ >= rhs.tech_) {
-    return false;
-  }
   if (box_ >= rhs.box_) {
     return false;
   }
 
-  // User Code Begin <
-  // User Code End <
   return true;
 }
 
 _dbChipRegion::_dbChipRegion(_dbDatabase* db)
 {
-  // User Code Begin Constructor
-  // User Code End Constructor
 }
 
 dbIStream& operator>>(dbIStream& stream, _dbChipRegion& obj)
@@ -75,10 +63,7 @@ dbIStream& operator>>(dbIStream& stream, _dbChipRegion& obj)
   stream >> obj.name_;
   stream >> obj.side_;
   stream >> obj.layer_;
-  stream >> obj.tech_;
   stream >> obj.box_;
-  // User Code Begin >>
-  // User Code End >>
   return stream;
 }
 
@@ -87,10 +72,7 @@ dbOStream& operator<<(dbOStream& stream, const _dbChipRegion& obj)
   stream << obj.name_;
   stream << obj.side_;
   stream << obj.layer_;
-  stream << obj.tech_;
   stream << obj.box_;
-  // User Code Begin <<
-  // User Code End <<
   return stream;
 }
 
@@ -98,13 +80,7 @@ void _dbChipRegion::collectMemInfo(MemInfo& info)
 {
   info.cnt++;
   info.size += sizeof(*this);
-
-  // User Code Begin collectMemInfo
-  // User Code End collectMemInfo
 }
-
-// User Code Begin PrivateMethods
-// User Code End PrivateMethods
 
 ////////////////////////////////////////////////////////////////////
 //
