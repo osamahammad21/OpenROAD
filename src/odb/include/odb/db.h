@@ -7211,6 +7211,24 @@ class dbChipInst : public dbObject
   void setLoc(Point3D loc);
 
   Point3D getLoc() const;
+
+  // User Code Begin dbChipInst
+  void setOrient(dbOrientType orient);
+
+  dbOrientType getOrient() const;
+
+  dbTransform getTransform() const;
+
+  dbChip* getParentChip() const;
+
+  dbChip* getMasterChip() const;
+
+  static dbChipInst* create(dbChip* parent,
+                            dbChip* master,
+                            const std::string& name);
+
+  static void destroy(dbChipInst* chip_inst);
+  // User Code End dbChipInst
 };
 
 class dbChipRegion : public dbObject

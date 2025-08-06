@@ -15,6 +15,7 @@ namespace odb {
 class dbIStream;
 class dbOStream;
 class _dbDatabase;
+class _dbChip;
 
 class _dbChipInst : public _dbObject
 {
@@ -28,7 +29,8 @@ class _dbChipInst : public _dbObject
 
   std::string name_;
   Point3D loc_;
-  uint orient_;
+  dbOrientType::Value orient_;
+  dbId<_dbChip> master_chip_;
 };
 dbIStream& operator>>(dbIStream& stream, _dbChipInst& obj);
 dbOStream& operator<<(dbOStream& stream, const _dbChipInst& obj);

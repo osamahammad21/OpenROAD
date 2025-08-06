@@ -5,7 +5,7 @@
     {
       "name": "name_",
       "type": "std::string",
-      "flags":["cmpgt"]
+      "flags":["cmpgt", "no-set"]
     },
     {
       "name": "loc_",
@@ -14,9 +14,13 @@
     },
     {
       "name": "orient_",
-      "type": "uint",
-      "default": 0,
-      "flags": ["private" ,"cmpgt"]
+      "type": "dbOrientType::Value",
+      "flags": ["private" ,"cmpgt", "no-serial"]
+    },
+    {
+      "name": "master_chip_",
+      "type": "dbId<_dbChip>",
+      "flags": ["private", "cmpgt"]
     }
   ],
   "h_includes": [
