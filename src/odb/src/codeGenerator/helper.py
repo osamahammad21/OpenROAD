@@ -24,6 +24,7 @@ _comparable = [
     "string",
     "uint",
     "unint_32t",
+    "uint8_t"
 ]
 std = [
     "bool",
@@ -43,6 +44,7 @@ std = [
     "string",
     "uint",
     "unint_32t",
+    "uint8_t"
 ]
 
 _removable = ["const", "static", "unsigned"]
