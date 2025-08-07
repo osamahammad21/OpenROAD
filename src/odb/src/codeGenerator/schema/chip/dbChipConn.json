@@ -1,0 +1,12 @@
+{
+  "name": "dbChipConn",
+  "type": "dbObject",
+  "fields": [
+    { "name": "name_", "type": "std::string", "flags": ["cmpgt", "no-set"] },
+    { "name": "thickness_", "type": "int", "flags": ["cmpgt"] },
+    { "name": "top_region_", "type": "dbId<_dbChipRegionInst>", "flags": ["private", "cmpgt"] },
+    { "name": "bottom_region_", "type": "dbId<_dbChipRegionInst>", "flags": ["private", "cmpgt"] }
+  ],
+  "h_includes": ["odb/dbId.h"],
+  "cpp_includes": ["dbChipRegionInst.h"]
+}

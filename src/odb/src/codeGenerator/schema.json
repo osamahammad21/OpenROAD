@@ -391,6 +391,12 @@
       "child":"dbChipRegionInst",
       "type":"1_n",
       "tbl_name":"chip_region_inst_tbl_"
+    },
+    {
+      "parent":"dbChip",
+      "child":"dbChipConn",
+      "type":"1_n",
+      "tbl_name":"chip_conn_tbl_"
     }
   ]
 }

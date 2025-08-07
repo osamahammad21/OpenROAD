@@ -20,6 +20,7 @@ class dbBlockItr;
 class _dbProperty;
 class _dbChipInst;
 class _dbChipRegion;
+class _dbChipConn;
 class _dbBlock;
 
 class _dbChip : public _dbObject
@@ -60,6 +61,7 @@ class _dbChip : public _dbObject
   dbTable<_dbProperty>* _prop_tbl;
   dbTable<_dbChipInst>* chip_inst_tbl_;
   dbTable<_dbChipRegion>* chip_region_tbl_;
+  dbTable<_dbChipConn>* chip_conn_tbl_;
 };
 dbIStream& operator>>(dbIStream& stream, _dbChip& obj);
 dbOStream& operator<<(dbOStream& stream, const _dbChip& obj);
