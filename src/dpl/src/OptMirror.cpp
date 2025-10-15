@@ -8,167 +8,93 @@
 #include <unordered_set>
 #include <vector>
 
-#include "dpl/Opendp.h"
+#include "PlacementDRC.h"
+#include "infrastructure/network.h"
 #include "odb/db.h"
 #include "odb/dbTypes.h"
-#include "odb/util.h"
 #include "utl/Logger.h"
 
 namespace dpl {
 
 using utl::DPL;
 
-using std::sort;
-using std::unordered_set;
-
-using odb::dbITerm;
 using odb::dbOrientType;
 
 static dbOrientType orientMirrorY(const dbOrientType& orient);
 
-NetBox::NetBox(odb::dbNet* net, const odb::Rect& box, bool ignore)
-    : net_(net), box_(box), ignore_(ignore)
+OptimizeMirroring::OptimizeMirroring(Logger* logger,
+                                     Network* network,
+                                     PlacementDRC* placement_drc)
+    : logger_(logger), network_(network), placement_drc_(placement_drc)
 {
 }
 
-int64_t NetBox::hpwl()
+int OptimizeMirroring::run()
 {
-  return box_.dy() + box_.dx();
+  auto mirror_candidates = findMirrorCandidates();
+  // sort mirror candidates by hpwl in descending order
+  std::sort(mirror_candidates.begin(),
+            mirror_candidates.end(),
+            [this](Node* a, Node* b) { return hpwl(a) > hpwl(b); });
+  return mirrorCandidates(mirror_candidates);
 }
 
-void NetBox::saveBox()
+std::vector<Node*> OptimizeMirroring::findMirrorCandidates()
 {
-  box_saved_ = box_;
-}
-
-void NetBox::restoreBox()
-{
-  box_ = box_saved_;
-}
-
-////////////////////////////////////////////////////////////////
-
-OptimizeMirroring::OptimizeMirroring(Logger* logger, odb::dbDatabase* db)
-    : logger_(logger), db_(db), block_(db_->getChip()->getBlock())
-{
-}
-
-void OptimizeMirroring::run()
-{
-  findNetBoxes();
-
-  NetBoxes sorted_boxes;
-  for (auto& net_box : net_box_map_) {
-    sorted_boxes.push_back(&net_box.second);
-  }
-
-  // Sort net boxes by net hpwl.
-  sort(sorted_boxes.begin(),
-       sorted_boxes.end(),
-       [](NetBox* net_box1, NetBox* net_box2) -> bool {
-         return net_box1->hpwl() > net_box2->hpwl();
-       });
-
-  std::vector<odb::dbInst*> mirror_candidates
-      = findMirrorCandidates(sorted_boxes);
-  odb::WireLengthEvaluator eval(block_);
-  int64_t hpwl_before = eval.hpwl();
-  int mirror_count = mirrorCandidates(mirror_candidates);
-
-  if (mirror_count > 0) {
-    logger_->info(DPL, 20, "Mirrored {} instances", mirror_count);
-    double hpwl_after = eval.hpwl();
-    logger_->info(DPL,
-                  21,
-                  "HPWL before          {:8.1f} u",
-                  block_->dbuToMicrons(hpwl_before));
-    logger_->info(DPL,
-                  22,
-                  "HPWL after           {:8.1f} u",
-                  block_->dbuToMicrons(hpwl_after));
-    double hpwl_delta = (hpwl_before != 0)
-                            ? (hpwl_after - hpwl_before) / hpwl_before * 100
-                            : 0.0;
-    logger_->info(DPL, 23, "HPWL delta           {:8.1f} %", hpwl_delta);
-  }
-}
-
-void OptimizeMirroring::findNetBoxes()
-{
-  net_box_map_.clear();
-  auto nets = block_->getNets();
-  for (odb::dbNet* net : nets) {
-    bool ignore = net->getSigType().isSupply()
-                  || net->isSpecial()
-                  // Reducing HPWL on large nets (like clocks) is irrelevant
-                  // to mirroring criterra.
-                  // Note that getITerms().size() iteractes through the iterms
-                  // so it has to be checked once here instead of where it is
-                  // needed.
-                  || net->getITerms().size() > mirror_max_iterm_count_;
-    if (ignore) {
-      debugPrint(
-          logger_, DPL, "opt_mirror", 2, "ignore {}", net->getConstName());
+  std::vector<Node*> mirror_candidates;
+  std::unordered_set<Node*> existing;
+  for (auto& edge : network_->getEdges()) {
+    auto box = edge->getBBox();
+    if (edge->getNumPins() >= mirror_max_iterm_count_) {
+      continue;
     }
-    net_box_map_[net] = NetBox(net, net->getTermBBox(), ignore);
-  }
-}
-
-std::vector<odb::dbInst*> OptimizeMirroring::findMirrorCandidates(
-    NetBoxes& net_boxes)
-{
-  std::vector<odb::dbInst*> mirror_candidates;
-  unordered_set<odb::dbInst*> existing;
-  // Find inst terms on the boundary of the net boxes.
-  for (NetBox* net_box : net_boxes) {
-    if (!net_box->isIgnore()) {
-      odb::dbNet* net = net_box->getNet();
-      const odb::Rect& box = net_box->getBox();
-      for (dbITerm* iterm : net->getITerms()) {
-        odb::dbInst* inst = iterm->getInst();
-        int x, y;
-        if (inst->isCore() && !inst->isFixed() && iterm->getAvgXY(&x, &y)
-            && (x == box.xMin() || x == box.xMax() || y == box.yMin()
-                || y == box.yMax())) {
-          odb::dbInst* inst = iterm->getInst();
-          if (existing.find(inst) == existing.end()) {
-            mirror_candidates.push_back(inst);
-            existing.insert(inst);
-            debugPrint(logger_,
-                       DPL,
-                       "opt_mirror",
-                       1,
-                       "candidate {}",
-                       inst->getConstName());
-          }
-        }
+    for (auto& pin : edge->getPins()) {
+      auto node = pin->getNode();
+      auto inst = node->getDbInst();
+      if (inst == nullptr) {
+        continue;
       }
+      if (inst->isFixed() || !inst->isCore()) {
+        continue;
+      }
+      // if the pin is not on the edge of the box, skip it
+      if (box.overlaps(pin->getLocation())) {
+        continue;
+      }
+      if (existing.find(node) != existing.end()) {
+        continue;
+      }
+      mirror_candidates.push_back(node);
+      existing.insert(node);
+      debugPrint(
+          logger_, DPL, "opt_mirror", 1, "candidate {}", inst->getConstName());
     }
   }
   return mirror_candidates;
 }
 
-int OptimizeMirroring::mirrorCandidates(
-    std::vector<odb::dbInst*>& mirror_candidates)
+int OptimizeMirroring::mirrorCandidates(std::vector<Node*>& mirror_candidates)
 {
   int mirror_count = 0;
-  for (odb::dbInst* inst : mirror_candidates) {
+  for (auto node : mirror_candidates) {
     // Use hpwl of all nets connected to the instance terms
     // before/after to determine incremental change to total hpwl.
-    int64_t hpwl_before = hpwl(inst);
-    saveNetBoxes(inst);
-    dbOrientType orient = inst->getOrient();
+    int64_t hpwl_before = hpwl(node);
+    dbOrientType orient = node->getOrient();
     dbOrientType orient_my = orientMirrorY(orient);
-    inst->setLocationOrient(orient_my);
-    updateNetBoxes(inst);
-    int64_t hpwl_after = hpwl(inst);
-    if (hpwl_after > hpwl_before) {
+    node->adjustCurrOrient(orient_my);
+    int64_t hpwl_after = hpwl(node);
+    bool valid = placement_drc_->checkDRC(node);
+    if (!valid || hpwl_after > hpwl_before) {
       // Undo mirroring if hpwl is worse.
-      inst->setLocationOrient(orient);
-      restoreNetBoxes(inst);
+      node->adjustCurrOrient(orient);
     } else {
-      debugPrint(
-          logger_, DPL, "opt_mirror", 1, "mirror {}", inst->getConstName());
+      debugPrint(logger_,
+                 DPL,
+                 "opt_mirror",
+                 1,
+                 "mirror {}",
+                 node->getDbInst()->getConstName());
       mirror_count++;
     }
   }
@@ -201,52 +127,19 @@ static dbOrientType orientMirrorY(const dbOrientType& orient)
   return dbOrientType::R0;
 }
 
-int64_t OptimizeMirroring::hpwl(odb::dbInst* inst)
+int64_t OptimizeMirroring::hpwl(Node* node)
 {
-  int64_t inst_hpwl = 0;
-  for (dbITerm* iterm : inst->getITerms()) {
-    odb::dbNet* net = iterm->getNet();
-    if (net) {
-      NetBox& net_box = net_box_map_[net];
-      if (!net_box.isIgnore()) {
-        inst_hpwl += net_box.hpwl();
-      }
+  int64_t hpwl = 0;
+  for (auto pin : node->getPins()) {
+    if (pin->getEdge() == nullptr) {
+      continue;
     }
-  }
-  return inst_hpwl;
-}
-
-void OptimizeMirroring::updateNetBoxes(odb::dbInst* inst)
-{
-  for (dbITerm* iterm : inst->getITerms()) {
-    odb::dbNet* net = iterm->getNet();
-    if (net) {
-      NetBox& net_box = net_box_map_[net];
-      if (!net_box.isIgnore()) {
-        net_box_map_[net].setBox(net->getTermBBox());
-      }
+    if (pin->getEdge()->getNumPins() >= mirror_max_iterm_count_) {
+      continue;
     }
+    hpwl += pin->getEdge()->hpwl();
   }
-}
-
-void OptimizeMirroring::saveNetBoxes(odb::dbInst* inst)
-{
-  for (dbITerm* iterm : inst->getITerms()) {
-    odb::dbNet* net = iterm->getNet();
-    if (net) {
-      net_box_map_[net].saveBox();
-    }
-  }
-}
-
-void OptimizeMirroring::restoreNetBoxes(odb::dbInst* inst)
-{
-  for (dbITerm* iterm : inst->getITerms()) {
-    odb::dbNet* net = iterm->getNet();
-    if (net) {
-      net_box_map_[net].restoreBox();
-    }
-  }
+  return hpwl;
 }
 
 }  // namespace dpl

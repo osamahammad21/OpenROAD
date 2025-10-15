@@ -77,6 +77,7 @@ class Network
   Node* getNode(odb::dbInst* inst);
   Node* getNode(odb::dbBTerm* term);
   Master* getMaster(odb::dbMaster*);
+  std::vector<std::unique_ptr<Edge>>& getEdges() { return edges_; }
   int getNumEdges() const { return (int) edges_.size(); }
   Edge* getEdge(odb::dbNet* net) const;
   Edge* getEdge(int i) const { return edges_[i].get(); }

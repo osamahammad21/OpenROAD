@@ -204,6 +204,7 @@ class Edge
   const std::vector<Pin*>& getPins() const;
   void addPin(Pin* pin);
   void removePin(Pin* pin);
+  odb::Rect getBBox() const;
   uint64_t hpwl() const;
 
  private:
@@ -239,6 +240,7 @@ class Pin
   DbuX getPinWidth() const;
   void setPinHeight(DbuY height);
   DbuY getPinHeight() const;
+  odb::Point getLocation() const;
 
  private:
   // Pin width and height.

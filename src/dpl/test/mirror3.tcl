@@ -1,5 +1,5 @@
 source "helpers.tcl"
 # optimize_mirroring without detailed placement
 read_lef Nangate45/Nangate45.lef
-read_def gcd_replace.def
+read_def gcd_replace_placed.def
 optimize_mirroring

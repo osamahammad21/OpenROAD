@@ -151,8 +151,12 @@ void Opendp::setGridCells()
     if (cell->getType() != Node::CELL) {
       continue;
     }
-    grid_->visitCellPixels(*cell, false, [&](Pixel* pixel, bool padded) {
-      setGridCell(*cell, pixel);
+    grid_->visitCellPixels(*cell, true, [&](Pixel* pixel, bool padded) {
+      if (padded) {
+        pixel->padding_reserved_by = cell.get();
+      } else {
+        setGridCell(*cell, pixel);
+      }
     });
   }
 }

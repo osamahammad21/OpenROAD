@@ -217,8 +217,33 @@ void Opendp::findDisplacementStats()
 
 void Opendp::optimizeMirroring()
 {
-  OptimizeMirroring opt(logger_, db_);
-  opt.run();
+  if (network_->getNumCells() == 0) {
+    importDb();
+    adjustNodesOrient();
+    initGrid();
+    setGridCells();
+  }
+  odb::WireLengthEvaluator eval(block_);
+  int64_t hpwl_before = eval.hpwl();
+  OptimizeMirroring opt(logger_, network_.get(), drc_engine_.get());
+  int mirror_count = opt.run();
+  updateDbInstLocations();
+  if (mirror_count > 0) {
+    logger_->info(DPL, 20, "Mirrored {} instances", mirror_count);
+    double hpwl_after = eval.hpwl();
+    logger_->info(DPL,
+                  21,
+                  "HPWL before          {:8.1f} u",
+                  block_->dbuToMicrons(hpwl_before));
+    logger_->info(DPL,
+                  22,
+                  "HPWL after           {:8.1f} u",
+                  block_->dbuToMicrons(hpwl_after));
+    double hpwl_delta = (hpwl_before != 0)
+                            ? (hpwl_after - hpwl_before) / hpwl_before * 100
+                            : 0.0;
+    logger_->info(DPL, 23, "HPWL delta           {:8.1f} %", hpwl_delta);
+  }
 }
 
 int Opendp::disp(const Node* cell) const

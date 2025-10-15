@@ -551,19 +551,18 @@ void Edge::removePin(Pin* pin)
 {
   pins_.erase(std::remove(pins_.begin(), pins_.end(), pin), pins_.end());
 }
-uint64_t Edge::hpwl() const
+odb::Rect Edge::getBBox() const
 {
   odb::Rect rect;
   rect.mergeInit();
   for (const Pin* pinj : getPins()) {
-    const Node* ndj = pinj->getNode();
-
-    const DbuX x = ndj->getCenterX() + pinj->getOffsetX();
-    const DbuY y = ndj->getCenterY() + pinj->getOffsetY();
-
-    rect.merge(odb::Point(x.v, y.v));
+    rect.merge(pinj->getLocation());
   }
-
+  return rect;
+}
+uint64_t Edge::hpwl() const
+{
+  const odb::Rect rect = getBBox();
   return rect.dx() + rect.dy();
 }
 ////////////////////////////////////////////////////////////////////////////////
@@ -633,6 +632,11 @@ void Pin::setPinHeight(DbuY height)
 DbuY Pin::getPinHeight() const
 {
   return pinHeight_;
+}
+odb::Point Pin::getLocation() const
+{
+  return odb::Point(getNode()->getCenterX().v + getOffsetX().v,
+                    getNode()->getCenterY().v + getOffsetY().v);
 }
 
 }  // namespace dpl
