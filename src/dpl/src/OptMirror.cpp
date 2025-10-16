@@ -22,6 +22,29 @@ using odb::dbOrientType;
 
 static dbOrientType orientMirrorY(const dbOrientType& orient);
 
+namespace {
+int64_t getNetHpwl(odb::dbNet* net)
+{
+  auto term_bbox = net->getTermBBox();
+  return term_bbox.dx() + term_bbox.dy();
+}
+int64_t getNetHpwl(Edge* edge)
+{
+  return getNetHpwl(edge->getNet());
+}
+Pin* getPinFromTerm(odb::dbITerm* term, Edge* edge)
+{
+  for (auto& pin : edge->getPins()) {
+    if (pin->isBTerm()) {
+      continue;
+    }
+    if (pin->getITerm() == term) {
+      return pin;
+    }
+  }
+  return nullptr;
+}
+}  // namespace
 OptimizeMirroring::OptimizeMirroring(Logger* logger,
                                      Network* network,
                                      PlacementDRC* placement_drc)
@@ -32,42 +55,50 @@ OptimizeMirroring::OptimizeMirroring(Logger* logger,
 int OptimizeMirroring::run()
 {
   auto mirror_candidates = findMirrorCandidates();
-  // sort mirror candidates by hpwl in descending order
-  std::sort(mirror_candidates.begin(),
-            mirror_candidates.end(),
-            [this](Node* a, Node* b) { return hpwl(a) > hpwl(b); });
   return mirrorCandidates(mirror_candidates);
 }
 
 std::vector<Node*> OptimizeMirroring::findMirrorCandidates()
 {
-  std::vector<Node*> mirror_candidates;
-  std::unordered_set<Node*> existing;
+  std::vector<Edge*> sorted_edges;
   for (auto& edge : network_->getEdges()) {
-    auto box = edge->getBBox();
     if (edge->getNumPins() >= mirror_max_iterm_count_) {
       continue;
     }
-    for (auto& pin : edge->getPins()) {
-      auto node = pin->getNode();
-      auto inst = node->getDbInst();
-      if (inst == nullptr) {
-        continue;
+    sorted_edges.push_back(edge.get());
+  }
+  std::sort(sorted_edges.begin(), sorted_edges.end(), [this](Edge* a, Edge* b) {
+    return getNetHpwl(a) > getNetHpwl(b);
+  });
+
+  std::vector<Node*> mirror_candidates;
+  std::unordered_set<Node*> existing;
+  for (auto& edge : sorted_edges) {
+    auto net = edge->getNet();
+    auto box = net->getTermBBox();
+    for (auto iterm : net->getITerms()) {
+      auto pin = getPinFromTerm(iterm, edge);
+      if (pin == nullptr) {
+        logger_->error(
+            DPL, 8914, "pin not found for iterm {}", iterm->getName());
       }
-      if (inst->isFixed() || !inst->isCore()) {
-        continue;
+      odb::dbInst* inst = iterm->getInst();
+      int x, y;
+      if (inst->isCore() && !inst->isFixed() && iterm->getAvgXY(&x, &y)
+          && (x == box.xMin() || x == box.xMax() || y == box.yMin()
+              || y == box.yMax())) {
+        Node* node = pin->getNode();
+        if (existing.find(node) == existing.end()) {
+          mirror_candidates.push_back(node);
+          existing.insert(node);
+          debugPrint(logger_,
+                     DPL,
+                     "opt_mirror",
+                     1,
+                     "candidate {}",
+                     inst->getConstName());
+        }
       }
-      // if the pin is not on the edge of the box, skip it
-      if (box.overlaps(pin->getLocation())) {
-        continue;
-      }
-      if (existing.find(node) != existing.end()) {
-        continue;
-      }
-      mirror_candidates.push_back(node);
-      existing.insert(node);
-      debugPrint(
-          logger_, DPL, "opt_mirror", 1, "candidate {}", inst->getConstName());
     }
   }
   return mirror_candidates;
@@ -83,11 +114,13 @@ int OptimizeMirroring::mirrorCandidates(std::vector<Node*>& mirror_candidates)
     dbOrientType orient = node->getOrient();
     dbOrientType orient_my = orientMirrorY(orient);
     node->adjustCurrOrient(orient_my);
+    node->getDbInst()->setLocationOrient(orient_my);
     int64_t hpwl_after = hpwl(node);
     bool valid = placement_drc_->checkDRC(node);
     if (!valid || hpwl_after > hpwl_before) {
       // Undo mirroring if hpwl is worse.
       node->adjustCurrOrient(orient);
+      node->getDbInst()->setLocationOrient(orient);
     } else {
       debugPrint(logger_,
                  DPL,
@@ -137,7 +170,7 @@ int64_t OptimizeMirroring::hpwl(Node* node)
     if (pin->getEdge()->getNumPins() >= mirror_max_iterm_count_) {
       continue;
     }
-    hpwl += pin->getEdge()->hpwl();
+    hpwl += getNetHpwl(pin->getEdge());
   }
   return hpwl;
 }
