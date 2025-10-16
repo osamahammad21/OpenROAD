@@ -40,16 +40,6 @@ Node* Network::getNode(odb::dbBTerm* term)
 }
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-Edge* Network::getEdge(odb::dbNet* net) const
-{
-  auto it = net_to_edge_idx_.find(net);
-  if (it == net_to_edge_idx_.end()) {
-    return nullptr;
-  }
-  return edges_[it->second].get();
-}
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
 Master* Network::getMaster(odb::dbMaster* db_master)
 {
   auto it = master_to_idx_.find(db_master);
@@ -62,7 +52,7 @@ Master* Network::getMaster(odb::dbMaster* db_master)
 ////////////////////////////////////////////////////////////////////////////////
 Pin* Network::addPin(odb::dbITerm* term)
 {
-  auto upin = std::make_unique<Pin>();
+  auto upin = std::make_unique<Pin>(term);
   Pin* ptr = upin.get();
   auto mTerm = term->getMTerm();
   auto master = mTerm->getMaster();
@@ -102,7 +92,7 @@ Pin* Network::addPin(odb::dbITerm* term)
 }
 Pin* Network::addPin(odb::dbBTerm* term)
 {
-  auto upin = std::make_unique<Pin>();
+  auto upin = std::make_unique<Pin>(term);
   Pin* ptr = upin.get();
   pins_.emplace_back(std::move(upin));
   return ptr;
@@ -124,14 +114,10 @@ void Network::addEdge(odb::dbNet* net)
   // Just allocate an edge, append it and give it the id
   // that corresponds to its index.
   const int id = (int) edges_.size();
-  auto uedge = std::make_unique<Edge>();
+  auto uedge = std::make_unique<Edge>(net);
   uedge->setId(id);
   Edge* edge = uedge.get();
   ////////////////////////
-  net_to_edge_idx_[net] = id;
-  // Name of edge.
-  setEdgeName(id, net->getName());
-
   for (auto iterm : net->getITerms()) {
     if (!iterm->getInst()->getMaster()->isCoreAutoPlaceable()) {
       continue;
@@ -455,11 +441,9 @@ void Network::clear()
   edges_.clear();
   pins_.clear();
   blockages_.clear();
-  edgeNames_.clear();
   inst_to_node_idx_.clear();
   term_to_node_idx_.clear();
   master_to_idx_.clear();
-  net_to_edge_idx_.clear();
   cells_cnt_ = 0;
   terminals_cnt_ = 0;
 }

@@ -526,7 +526,9 @@ void Group::setUtil(const double in)
 }
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
-
+Edge::Edge(odb::dbNet* net) : net_(net)
+{
+}
 int Edge::getId() const
 {
   return id_;
@@ -534,6 +536,10 @@ int Edge::getId() const
 void Edge::setId(int id)
 {
   id_ = id;
+}
+odb::dbNet* Edge::getNet() const
+{
+  return net_;
 }
 int Edge::getNumPins() const
 {
@@ -565,10 +571,19 @@ uint64_t Edge::hpwl() const
   const odb::Rect rect = getBBox();
   return rect.dx() + rect.dy();
 }
+std::string Edge::getName() const
+{
+  return net_->getName();
+}
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 
-Pin::Pin() = default;
+Pin::Pin(odb::dbBTerm* term) : term_(term)
+{
+}
+Pin::Pin(odb::dbITerm* term) : term_(term)
+{
+}
 void Pin::setDirection(int dir)
 {
   dir_ = dir;
@@ -639,4 +654,18 @@ odb::Point Pin::getLocation() const
                     getNode()->getCenterY().v + getOffsetY().v);
 }
 
+odb::dbITerm* Pin::getITerm() const
+{
+  return static_cast<odb::dbITerm*>(term_);
+}
+odb::dbBTerm* Pin::getBTerm() const
+{
+  return static_cast<odb::dbBTerm*>(term_);
+}
+
+bool Pin::isBTerm() const
+{
+  return term_ != nullptr
+         && term_->getObjectType() == odb::dbObjectType::dbBTermObj;
+}
 }  // namespace dpl

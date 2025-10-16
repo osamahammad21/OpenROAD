@@ -79,10 +79,7 @@ class Network
   Master* getMaster(odb::dbMaster*);
   std::vector<std::unique_ptr<Edge>>& getEdges() { return edges_; }
   int getNumEdges() const { return (int) edges_.size(); }
-  Edge* getEdge(odb::dbNet* net) const;
   Edge* getEdge(int i) const { return edges_[i].get(); }
-  void setEdgeName(int i, const std::string& name) { edgeNames_[i] = name; }
-  const std::string& getEdgeName(int i) const { return edgeNames_.at(i); }
 
   int getNumPins() const { return (int) pins_.size(); }
 
@@ -125,12 +122,10 @@ class Network
   std::vector<std::unique_ptr<Pin>> pins_;    // The pins in the network...
   std::vector<odb::Rect> blockages_;          // The placement blockages ..
 
-  std::unordered_map<int, std::string> edgeNames_;  // Names of edges...
-
   std::unordered_map<odb::dbInst*, int> inst_to_node_idx_;
   std::unordered_map<odb::dbBTerm*, int> term_to_node_idx_;
   std::unordered_map<odb::dbMaster*, int> master_to_idx_;
-  std::unordered_map<odb::dbNet*, int> net_to_edge_idx_;
+
   uint cells_cnt_{0};
   uint terminals_cnt_{0};
 };

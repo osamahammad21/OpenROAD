@@ -198,17 +198,21 @@ class Group
 class Edge
 {
  public:
+  Edge(odb::dbNet* net);
   int getId() const;
   void setId(int id);
+  odb::dbNet* getNet() const;
   int getNumPins() const;
   const std::vector<Pin*>& getPins() const;
   void addPin(Pin* pin);
   void removePin(Pin* pin);
   odb::Rect getBBox() const;
   uint64_t hpwl() const;
+  std::string getName() const;
 
  private:
   int id_{0};
+  odb::dbNet* net_{nullptr};
   std::vector<Pin*> pins_;
 };
 
@@ -223,7 +227,8 @@ class Pin
     Dir_UNKNOWN
   };
 
-  Pin();
+  Pin(odb::dbBTerm* term);
+  Pin(odb::dbITerm* term);
   void setDirection(int dir);
   int getDirection() const;
   void setNode(Node* node);
@@ -241,6 +246,9 @@ class Pin
   void setPinHeight(DbuY height);
   DbuY getPinHeight() const;
   odb::Point getLocation() const;
+  odb::dbITerm* getITerm() const;
+  odb::dbBTerm* getBTerm() const;
+  bool isBTerm() const;
 
  private:
   // Pin width and height.
@@ -256,6 +264,8 @@ class Pin
   // Offsets from cell center.
   DbuX offsetX_{0};
   DbuY offsetY_{0};
+  // Term for pin.
+  odb::dbObject* term_{nullptr};
 };
 
 }  // namespace dpl
