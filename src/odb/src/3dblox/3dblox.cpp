@@ -693,16 +693,37 @@ std::pair<dbInst*, odb::dbBTerm*> ThreeDBlox::createBump(
   inst->setPlacementStatus(dbPlacementStatus::FIRM);
 
   dbNet* net = nullptr;
-  dbBTerm* term = nullptr;
-
+  if (entry.net_name != "-") {
+    net = block->findNet(entry.net_name.c_str());
+    if (net == nullptr) {
+      net = dbNet::create(block, entry.net_name.c_str());
+    }
+  }
   // Find bterm
+  dbBTerm* term = nullptr;
   if (entry.port_name != "-") {
     term = block->findBTerm(entry.port_name.c_str());
     if (term == nullptr) {
+      // create bterm
+      if (net == nullptr) {
+        net = dbNet::create(block, entry.port_name.c_str());
+        if (net == nullptr) {  // net with the same port name already exists
+          logger_->error(
+              utl::ODB,
+              539,
+              "3DBV Parser Error: Failed to create net for bump port {}",
+              entry.port_name);
+        }
+      }
+      term = dbBTerm::create(net, entry.port_name.c_str());
+    } else if (net != nullptr && term->getNet() != nullptr
+               && term->getNet() != net) {
       logger_->error(utl::ODB,
-                     539,
-                     "3DBV Parser Error: Bump port {} not found",
-                     entry.port_name);
+                     540,
+                     "3DBV Parser Error: Bump port {} is on a different net "
+                     "than the bump net {}",
+                     entry.port_name,
+                     entry.net_name);
     }
     net = term->getNet();
   }
@@ -710,6 +731,9 @@ std::pair<dbInst*, odb::dbBTerm*> ThreeDBlox::createBump(
   if (net != nullptr) {
     for (odb::dbITerm* iterm : inst->getITerms()) {
       iterm->connect(net);
+    }
+    if (term != nullptr) {
+      term->connect(net);  // no op if already connected
     }
   }
 
