@@ -1657,11 +1657,14 @@ void addRectToPolySet(gtl::polygon_90_set_data<frCoord>& polySet,
 void FlexDR::reportGuideCoverage()
 {
   using boost::polygon::operators::operator&;
+  using boost::polygon::operators::operator-;
 
   const auto numLayers = getTech()->getLayers().size();
   std::vector<uint64_t> totalAreaByLayerNum(numLayers, 0);
   std::vector<uint64_t> totalCoveredAreaByLayerNum(numLayers, 0);
   std::map<frNet*, std::vector<float>> netsCoverage;
+  // Store uncovered rectangles for marker creation: (net, layerNum, rect)
+  std::vector<std::tuple<frNet*, frLayerNum, odb::Rect>> uncoveredRects;
   const auto& nets = getDesign()->getTopBlock()->getNets();
   omp_set_num_threads(router_cfg_->MAX_THREADS);
 #pragma omp parallel for schedule(dynamic)
@@ -1704,14 +1707,29 @@ void FlexDR::reportGuideCoverage()
       float coveredPercentage = -1.0;
       uint64_t routingArea = 0;
       uint64_t coveredArea = 0;
+      // Collect uncovered rectangles for this net/layer
+      std::vector<std::tuple<frNet*, frLayerNum, odb::Rect>>
+          localUncoveredRects;
       if (!routeSetByLayerNum[lNum].empty()) {
         routingArea = gtl::area(routeSetByLayerNum[lNum]);
-        coveredArea
-            = gtl::area(routeSetByLayerNum[lNum] & guideSetByLayerNum[lNum]);
+        auto coveredSet = routeSetByLayerNum[lNum] & guideSetByLayerNum[lNum];
+        coveredArea = gtl::area(coveredSet);
         if (routingArea == 0) {
           coveredPercentage = -1.0;
         } else {
           coveredPercentage = (coveredArea / (double) routingArea) * 100;
+        }
+        // Compute uncovered region: routing - covered
+        gtl::polygon_90_set_data<frCoord> uncoveredSet
+            = routeSetByLayerNum[lNum] - coveredSet;
+        if (!uncoveredSet.empty()) {
+          std::vector<gtl::rectangle_data<frCoord>> rects;
+          uncoveredSet.get_rectangles(rects);
+          for (const auto& rect : rects) {
+            odb::Rect odbRect(
+                gtl::xl(rect), gtl::yl(rect), gtl::xh(rect), gtl::yh(rect));
+            localUncoveredRects.emplace_back(net.get(), lNum, odbRect);
+          }
         }
       }
 
@@ -1720,8 +1738,30 @@ void FlexDR::reportGuideCoverage()
         netsCoverage[net.get()].push_back(coveredPercentage);
         totalAreaByLayerNum[lNum] += routingArea;
         totalCoveredAreaByLayerNum[lNum] += coveredArea;
+        uncoveredRects.insert(uncoveredRects.end(),
+                              localUncoveredRects.begin(),
+                              localUncoveredRects.end());
       }
     }
+  }
+
+  // Create markers for uncovered routing segments
+  for (const auto& [net, lNum, rect] : uncoveredRects) {
+    auto marker = std::make_unique<frMarker>();
+    marker->setBBox(rect);
+    marker->setLayerNum(lNum);
+    marker->addSrc(net);
+    marker->addVictim(net, std::make_tuple(lNum, rect, false));
+    getRegionQuery()->addMarker(marker.get());
+    getDesign()->getTopBlock()->addMarker(std::move(marker));
+  }
+
+  if (!uncoveredRects.empty()) {
+    logger_->info(DRT,
+                  288,
+                  "Created {} markers for routing segments not covered by "
+                  "guides.",
+                  uncoveredRects.size());
   }
 
   std::ofstream file(router_cfg_->GUIDE_REPORT_FILE);
@@ -1975,6 +2015,7 @@ int FlexDR::main()
     if (iter_ > router_cfg_->END_ITERATION) {
       break;
     }
+    args.followGuide = true;
     int clipSize = args.size;
     if (args.ripupMode != RipUpMode::ALL) {
       if (increaseClipsize_) {
@@ -2008,13 +2049,12 @@ int FlexDR::main()
     }
     ++iter_;
   }
-
-  end(/* done */ true);
-  reporter->end(true);
-
   if (!router_cfg_->GUIDE_REPORT_FILE.empty()) {
     reportGuideCoverage();
   }
+  end(/* done */ true);
+  reporter->end(true);
+
   if (router_cfg_->VERBOSE > 0) {
     t.print(logger_);
     std::cout << std::endl;

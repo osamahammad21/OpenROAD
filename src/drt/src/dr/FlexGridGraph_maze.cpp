@@ -555,7 +555,9 @@ frCost FlexGridGraph::getCosts(frMIdx gridX,
          + (markerCost ? ggMarkerCost_ * edgeLength : 0)
          + (shapeCost ? ggFixedShapeCost_ * edgeLength : 0)
          + (blockCost ? router_cfg_->BLOCKCOST * layer->getMinWidth() * 20 : 0)
-         + (!guideCost ? (router_cfg_->GUIDECOST * jumper_cost) * edgeLength
+         + (!guideCost ? (router_cfg_->GUIDECOST * jumper_cost
+                          * std::max(1, gridZ * 2))
+                             * edgeLength
                        : 0);
 }
 

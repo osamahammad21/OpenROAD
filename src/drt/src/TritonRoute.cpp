@@ -1391,7 +1391,7 @@ void TritonRoute::reportDRC(const std::string& file_name,
         violName = con->getViolName();
       }
     } else {
-      violName = "unknown";
+      violName = layer->getName();
     }
 
     odb::dbMarkerCategory* category
