@@ -3,14 +3,20 @@
 
 #include "chiplet3DWidget.h"
 
-#include <GL/gl.h>
+#include <vtkCellArray.h>
+#include <vtkCubeSource.h>
+#include <vtkGenericOpenGLRenderWindow.h>
+#include <vtkInteractorStyleTrackballCamera.h>
+#include <vtkLine.h>
+#include <vtkPoints.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkProperty.h>
+#include <vtkRenderWindowInteractor.h>
+#include <vtkUnsignedCharArray.h>
 
-#include <QMouseEvent>
-#include <algorithm>
 #include <array>
 #include <cmath>
-#include <cstdint>
-#include <vector>
 
 #include "odb/db.h"
 #include "odb/dbTransform.h"
@@ -19,43 +25,55 @@
 #include "utl/Logger.h"
 
 namespace {
-constexpr float INITIAL_DISTANCE_FACTOR = 3.0f;
-constexpr float LAYER_GAP_FACTOR = 2.0f;
-constexpr float MIN_DISTANCE_CHECK = 100.0f;
-constexpr float DEFAULT_DISTANCE = 1000.0f;
-constexpr float DEFAULT_SAFE_SIZE = 1000.0f;
-constexpr float NEAR_FAR_FACTOR = 2.0f;
-constexpr float MIN_Z_NEAR = 10.0f;
-constexpr float MAX_Z_FAR_OFFSET = 10000.0f;
-constexpr float GRID_SIZE_FACTOR = 1.5f;
-constexpr float GRID_STEPS = 5.0f;
-constexpr float GRID_Z_OFFSET_FACTOR = 0.05f;
+constexpr double INITIAL_DISTANCE_FACTOR = 3.0;
+constexpr double LAYER_GAP_FACTOR = 2.0;
+constexpr double MIN_DISTANCE_CHECK = 100.0;
+constexpr double DEFAULT_DISTANCE = 1000.0;
+constexpr double GRID_SIZE_FACTOR = 1.5;
 constexpr int GRID_LINE_COUNT = 5;
-constexpr float ROTATION_SENSITIVITY = 2.0f;
-constexpr float PAN_SENSITIVITY = 0.002f;
-constexpr float ZOOM_IN_FACTOR = 0.9f;
-constexpr float ZOOM_OUT_FACTOR = 1.1f;
-static const std::array<QVector3D, 7> COLOR_PALETTE = {{{0.0f, 1.0f, 0.0f},
-                                                        {1.0f, 1.0f, 0.0f},
-                                                        {0.0f, 1.0f, 1.0f},
-                                                        {1.0f, 0.0f, 1.0f},
-                                                        {1.0f, 0.5f, 0.0f},
-                                                        {0.5f, 0.5f, 1.0f},
-                                                        {1.0f, 0.0f, 0.0f}}};
+constexpr double GRID_STEPS = 5.0;
+constexpr double GRID_Z_OFFSET_FACTOR = 0.05;
+
+static const std::array<std::array<double, 3>, 7> COLOR_PALETTE
+    = {{{0.0, 1.0, 0.0},
+        {1.0, 1.0, 0.0},
+        {0.0, 1.0, 1.0},
+        {1.0, 0.0, 1.0},
+        {1.0, 0.5, 0.0},
+        {0.5, 0.5, 1.0},
+        {1.0, 0.0, 0.0}}};
 }  // namespace
 
 namespace gui {
 
-Chiplet3DWidget::Chiplet3DWidget(QWidget* parent) : QOpenGLWidget(parent)
+Chiplet3DWidget::Chiplet3DWidget(QWidget* parent)
+    : QVTKOpenGLNativeWidget(parent)
 {
-  // No initial rotation
+  setupRenderer();
+}
+
+void Chiplet3DWidget::setupRenderer()
+{
+  // Create render window and renderer
+  vtkNew<vtkGenericOpenGLRenderWindow> renderWindow;
+  renderer_ = vtkSmartPointer<vtkRenderer>::New();
+
+  renderWindow->AddRenderer(renderer_);
+  setRenderWindow(renderWindow);
+
+  // Set background color (dark gray)
+  renderer_->SetBackground(0.1, 0.1, 0.1);
+
+  // Setup interactor style for trackball camera rotation
+  vtkNew<vtkInteractorStyleTrackballCamera> style;
+  renderWindow->GetInteractor()->SetInteractorStyle(style);
 }
 
 void Chiplet3DWidget::setChip(odb::dbChip* chip)
 {
   chip_ = chip;
   buildGeometries();
-  update();
+  renderWindow()->Render();
 }
 
 void Chiplet3DWidget::setLogger(utl::Logger* logger)
@@ -63,13 +81,91 @@ void Chiplet3DWidget::setLogger(utl::Logger* logger)
   logger_ = logger;
 }
 
-void Chiplet3DWidget::initializeGL()
+vtkSmartPointer<vtkActor> Chiplet3DWidget::createChipletActor(double xMin,
+                                                              double yMin,
+                                                              double zMin,
+                                                              double xMax,
+                                                              double yMax,
+                                                              double zMax,
+                                                              double r,
+                                                              double g,
+                                                              double b)
 {
-  glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
-  glEnable(GL_DEPTH_TEST);
-  glDisable(GL_LIGHTING);
-  glDisable(GL_TEXTURE_2D);
-  glLineWidth(2.0f);
+  // Calculate center and dimensions
+  double centerX = (xMin + xMax) / 2.0;
+  double centerY = (yMin + yMax) / 2.0;
+  double centerZ = (zMin + zMax) / 2.0;
+  double lengthX = xMax - xMin;
+  double lengthY = yMax - yMin;
+  double lengthZ = zMax - zMin;
+
+  // Create cube source for solid cuboid
+  vtkNew<vtkCubeSource> cubeSource;
+  cubeSource->SetCenter(centerX, centerY, centerZ);
+  cubeSource->SetXLength(lengthX);
+  cubeSource->SetYLength(lengthY);
+  cubeSource->SetZLength(lengthZ);
+  cubeSource->Update();
+
+  // Create mapper
+  vtkNew<vtkPolyDataMapper> mapper;
+  mapper->SetInputConnection(cubeSource->GetOutputPort());
+
+  // Create actor
+  vtkSmartPointer<vtkActor> actor = vtkSmartPointer<vtkActor>::New();
+  actor->SetMapper(mapper);
+  actor->GetProperty()->SetColor(r, g, b);
+  actor->GetProperty()->SetOpacity(0.9);  // Slight transparency to see overlaps
+  actor->GetProperty()->SetEdgeVisibility(
+      true);  // Show edges for better definition
+  actor->GetProperty()->SetEdgeColor(0.2, 0.2, 0.2);  // Dark edges
+
+  return actor;
+}
+
+void Chiplet3DWidget::addGridActor()
+{
+  double grid_size = bounding_radius_ * GRID_SIZE_FACTOR;
+  double step = grid_size / GRID_STEPS;
+  double grid_z = 0;
+
+  vtkNew<vtkPoints> points;
+  vtkNew<vtkCellArray> lines;
+
+  int pointId = 0;
+  for (int i = -GRID_LINE_COUNT; i <= GRID_LINE_COUNT; ++i) {
+    double pos = i * step;
+
+    // Vertical line
+    points->InsertNextPoint(pos, -grid_size, grid_z);
+    points->InsertNextPoint(pos, grid_size, grid_z);
+    vtkNew<vtkLine> vLine;
+    vLine->GetPointIds()->SetId(0, pointId++);
+    vLine->GetPointIds()->SetId(1, pointId++);
+    lines->InsertNextCell(vLine);
+
+    // Horizontal line
+    points->InsertNextPoint(-grid_size, pos, grid_z);
+    points->InsertNextPoint(grid_size, pos, grid_z);
+    vtkNew<vtkLine> hLine;
+    hLine->GetPointIds()->SetId(0, pointId++);
+    hLine->GetPointIds()->SetId(1, pointId++);
+    lines->InsertNextCell(hLine);
+  }
+
+  vtkNew<vtkPolyData> polyData;
+  polyData->SetPoints(points);
+  polyData->SetLines(lines);
+
+  vtkNew<vtkPolyDataMapper> mapper;
+  mapper->SetInputData(polyData);
+
+  grid_actor_ = vtkSmartPointer<vtkActor>::New();
+  grid_actor_->SetMapper(mapper);
+  grid_actor_->GetProperty()->SetColor(0.3, 0.3, 0.3);
+  grid_actor_->GetProperty()->SetLineWidth(1.0);
+
+  renderer_->AddActor(grid_actor_);
 }
 
 void Chiplet3DWidget::buildGeometries()
@@ -77,172 +173,71 @@ void Chiplet3DWidget::buildGeometries()
   if (!chip_) {
     return;
   }
-  odb::Cuboid global_cuboid = chip_->getCuboid();
-  odb::UnfoldedModel model(logger_, chip_);
-  odb::dbTransform center_transform
-      = odb::dbTransform(odb::Point3D(-global_cuboid.xCenter(),
-                                      -global_cuboid.yCenter(),
-                                      -global_cuboid.zCenter()));
 
-  vertices_.clear();
-  indices_lines_.clear();
+  // Clear existing actors
+  for (auto& actor : chiplet_actors_) {
+    renderer_->RemoveActor(actor);
+  }
+  chiplet_actors_.clear();
 
-  // Center and Camera
-  float cx = (global_cuboid.xMin() + global_cuboid.xMax()) / 2.0f;
-  float cy = (global_cuboid.yMin() + global_cuboid.yMax()) / 2.0f;
-  center_ = QVector3D(cx, cy, 0.0f);
-
-  // Calculate bounding sphere radius (half-diagonal of bounding box)
-  // This remains constant regardless of rotation
-  float dx = global_cuboid.dx();
-  float dy = global_cuboid.dy();
-  float dz = global_cuboid.dz() * LAYER_GAP_FACTOR;  // with gap factor
-  bounding_radius_ = std::sqrt(dx * dx + dy * dy + dz * dz) / 2.0f;
-
-  distance_ = bounding_radius_ * INITIAL_DISTANCE_FACTOR;
-  if (distance_ < MIN_DISTANCE_CHECK) {
-    distance_ = DEFAULT_DISTANCE;
+  if (grid_actor_) {
+    renderer_->RemoveActor(grid_actor_);
+    grid_actor_ = nullptr;
   }
 
+  odb::Cuboid global_cuboid = chip_->getCuboid();
+  odb::UnfoldedModel model(logger_, chip_);
+  odb::dbTransform center_transform = odb::dbTransform(
+      odb::Point3D(-global_cuboid.xCenter(), -global_cuboid.yCenter(), 0));
+
+  // Calculate bounding sphere radius
+  double dx = global_cuboid.dx();
+  double dy = global_cuboid.dy();
+  double dz = global_cuboid.dz() * LAYER_GAP_FACTOR;
+  bounding_radius_ = std::sqrt(dx * dx + dy * dy + dz * dz) / 2.0;
+
+  double distance = bounding_radius_ * INITIAL_DISTANCE_FACTOR;
+  if (distance < MIN_DISTANCE_CHECK) {
+    distance = DEFAULT_DISTANCE;
+  }
+
+  // Add grid
+  addGridActor();
+
+  // Build chiplet actors
   int index = 0;
   for (const auto& chip : model.getChips()) {
     odb::Cuboid draw_cuboid = chip.cuboid;
     center_transform.apply(draw_cuboid);
-    // Color by Depth (proportional to Z)
-    QVector3D color = COLOR_PALETTE[index++ % COLOR_PALETTE.size()];
 
-    int base = vertices_.size();
-    for (const auto& p : draw_cuboid.getPoints()) {
-      vertices_.push_back({QVector3D(p.x(), p.y(), p.z()), color});
-    }
+    const auto& color = COLOR_PALETTE[index++ % COLOR_PALETTE.size()];
 
-    indices_lines_.push_back(base + 0);
-    indices_lines_.push_back(base + 1);
-    indices_lines_.push_back(base + 1);
-    indices_lines_.push_back(base + 2);
-    indices_lines_.push_back(base + 2);
-    indices_lines_.push_back(base + 3);
-    indices_lines_.push_back(base + 3);
-    indices_lines_.push_back(base + 0);
+    auto actor = createChipletActor(draw_cuboid.xMin(),
+                                    draw_cuboid.yMin(),
+                                    draw_cuboid.zMin(),
+                                    draw_cuboid.xMax(),
+                                    draw_cuboid.yMax(),
+                                    draw_cuboid.zMax(),
+                                    color[0],
+                                    color[1],
+                                    color[2]);
 
-    indices_lines_.push_back(base + 4);
-    indices_lines_.push_back(base + 5);
-    indices_lines_.push_back(base + 5);
-    indices_lines_.push_back(base + 6);
-    indices_lines_.push_back(base + 6);
-    indices_lines_.push_back(base + 7);
-    indices_lines_.push_back(base + 7);
-    indices_lines_.push_back(base + 4);
-
-    indices_lines_.push_back(base + 0);
-    indices_lines_.push_back(base + 4);
-    indices_lines_.push_back(base + 1);
-    indices_lines_.push_back(base + 5);
-    indices_lines_.push_back(base + 2);
-    indices_lines_.push_back(base + 6);
-    indices_lines_.push_back(base + 3);
-    indices_lines_.push_back(base + 7);
-  }
-}
-
-void Chiplet3DWidget::paintGL()
-{
-  glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-  glMatrixMode(GL_PROJECTION);
-  QMatrix4x4 proj;
-
-  // Use bounding_radius_ which is rotation-invariant
-  float safe_size = bounding_radius_;
-  if (safe_size < 1.0f) {
-    safe_size = DEFAULT_SAFE_SIZE;
+    chiplet_actors_.push_back(actor);
+    renderer_->AddActor(actor);
   }
 
-  float zNear = distance_ - safe_size * NEAR_FAR_FACTOR;
-  float zFar = distance_ + safe_size * NEAR_FAR_FACTOR;
+  // Setup camera
+  vtkCamera* camera = renderer_->GetActiveCamera();
+  camera->SetPosition(0, 0, distance);
+  camera->SetFocalPoint(0, 0, 0);
+  camera->SetViewUp(0, 1, 0);
 
-  zNear = std::max(zNear, MIN_Z_NEAR);
-  if (zFar < zNear + MIN_DISTANCE_CHECK) {
-    zFar = zNear + MAX_Z_FAR_OFFSET;
-  }
+  // Set clipping range based on bounding radius
+  double zNear = std::max(10.0, distance - bounding_radius_ * 2.0);
+  double zFar = distance + bounding_radius_ * 2.0;
+  camera->SetClippingRange(zNear, zFar);
 
-  qreal aspect = qreal(width()) / qreal(height() ? height() : 1);
-  proj.perspective(45.0f, aspect, zNear, zFar);
-  glLoadMatrixf(proj.constData());
-
-  glMatrixMode(GL_MODELVIEW);
-  QMatrix4x4 matrix;
-  matrix.translate(pan_x_, pan_y_, -distance_);  // Apply Pan
-  matrix.rotate(rotation_);                      // Apply Rotation
-  glLoadMatrixf(matrix.constData());
-
-  // Draw Reference Grid
-  glBegin(GL_LINES);
-  glColor3f(0.3f, 0.3f, 0.3f);
-  float grid_size = safe_size * GRID_SIZE_FACTOR;  // Adjust grid to scene size
-  float step = grid_size / GRID_STEPS;
-  float grid_z = -center_.z() - (distance_ * GRID_Z_OFFSET_FACTOR * 0.5f);
-
-  for (int i = -GRID_LINE_COUNT; i <= GRID_LINE_COUNT; ++i) {
-    float pos = i * step;
-    glVertex3f(pos, -grid_size, grid_z);
-    glVertex3f(pos, grid_size, grid_z);
-    glVertex3f(-grid_size, pos, grid_z);
-    glVertex3f(grid_size, pos, grid_z);
-  }
-  glEnd();
-
-  if (vertices_.empty()) {
-    return;
-  }
-
-  glBegin(GL_LINES);
-  for (uint16_t idx : indices_lines_) {
-    if (idx < vertices_.size()) {
-      const auto& v = vertices_[idx];
-      glColor3f(v.color.x(), v.color.y(), v.color.z());
-      glVertex3f(v.position.x(), v.position.y(), v.position.z());
-    }
-  }
-  glEnd();
-}
-
-void Chiplet3DWidget::mousePressEvent(QMouseEvent* e)
-{
-  mouse_press_position_ = QVector2D(e->localPos());
-}
-
-void Chiplet3DWidget::mouseReleaseEvent(QMouseEvent* e)
-{
-}
-
-void Chiplet3DWidget::mouseMoveEvent(QMouseEvent* e)
-{
-  QVector2D diff = QVector2D(e->localPos()) - mouse_press_position_;
-  mouse_press_position_ = QVector2D(e->localPos());
-
-  if (e->buttons() & Qt::LeftButton) {
-    // Rotation
-    QVector3D n = QVector3D(diff.y(), diff.x(), 0.0).normalized();
-    float angle = diff.length() / ROTATION_SENSITIVITY;
-    rotation_ = QQuaternion::fromAxisAndAngle(n, angle) * rotation_;
-  } else if (e->buttons() & Qt::RightButton) {
-    // Pan
-    float scale = distance_ * PAN_SENSITIVITY;
-    pan_x_ += diff.x() * scale;
-    pan_y_ -= diff.y() * scale;
-  }
-  update();
-}
-
-void Chiplet3DWidget::wheelEvent(QWheelEvent* e)
-{
-  if (e->angleDelta().y() > 0) {
-    distance_ *= ZOOM_IN_FACTOR;
-  } else {
-    distance_ *= ZOOM_OUT_FACTOR;
-  }
-  update();
+  renderer_->ResetCameraClippingRange();
 }
 
 }  // namespace gui

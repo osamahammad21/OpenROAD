@@ -3,12 +3,15 @@
 
 #pragma once
 
-#include <QMatrix4x4>
-#include <QOpenGLWidget>
-#include <QQuaternion>
-#include <QVector2D>
-#include <QVector3D>
-#include <cstdint>
+#include <QVTKOpenGLNativeWidget.h>
+#include <vtkActor.h>
+#include <vtkCamera.h>
+#include <vtkNew.h>
+#include <vtkPolyData.h>
+#include <vtkPolyDataMapper.h>
+#include <vtkRenderer.h>
+#include <vtkSmartPointer.h>
+
 #include <vector>
 
 namespace odb {
@@ -21,7 +24,7 @@ class Logger;
 
 namespace gui {
 
-class Chiplet3DWidget : public QOpenGLWidget
+class Chiplet3DWidget : public QVTKOpenGLNativeWidget
 {
   Q_OBJECT
 
@@ -32,39 +35,28 @@ class Chiplet3DWidget : public QOpenGLWidget
   void setChip(odb::dbChip* chip);
   void setLogger(utl::Logger* logger);
 
- protected:
-  void initializeGL() override;
-  void paintGL() override;
-
-  void mousePressEvent(QMouseEvent* e) override;
-  void mouseReleaseEvent(QMouseEvent* e) override;
-  void mouseMoveEvent(QMouseEvent* e) override;
-  void wheelEvent(QWheelEvent* e) override;
-
  private:
   void buildGeometries();
+  void setupRenderer();
+  void addGridActor();
+  vtkSmartPointer<vtkActor> createChipletActor(double xMin,
+                                               double yMin,
+                                               double zMin,
+                                               double xMax,
+                                               double yMax,
+                                               double zMax,
+                                               double r,
+                                               double g,
+                                               double b);
 
   odb::dbChip* chip_ = nullptr;
   utl::Logger* logger_ = nullptr;
 
-  QVector2D mouse_press_position_;
-  QQuaternion rotation_;
+  vtkSmartPointer<vtkRenderer> renderer_;
+  std::vector<vtkSmartPointer<vtkActor>> chiplet_actors_;
+  vtkSmartPointer<vtkActor> grid_actor_;
 
-  float distance_ = 10.0f;
-  float pan_x_ = 0.0f;
-  float pan_y_ = 0.0f;
-
-  float bounding_radius_ = 10.0f;  // Rotation-invariant bounding sphere radius
-  QVector3D center_ = QVector3D(0, 0, 0);
-
-  struct VertexData
-  {
-    QVector3D position;
-    QVector3D color;
-  };
-
-  std::vector<VertexData> vertices_;
-  std::vector<uint16_t> indices_lines_;
+  double bounding_radius_ = 10.0;
 };
 
 }  // namespace gui

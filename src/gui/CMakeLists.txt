@@ -8,11 +8,23 @@ option(BUILD_GUI "Build the GUI" ON)
 # support for the package so this needs to be "quiet".
 find_package(Qt5 QUIET COMPONENTS Core Widgets Charts)
 find_package(OpenGL REQUIRED)
+# Enable C language for MPI (required by VTK's MPI dependency)
+enable_language(C)
+find_package(MPI QUIET COMPONENTS C CXX)
+find_package(VTK QUIET COMPONENTS
+  CommonCore
+  CommonDataModel
+  FiltersSources
+  InteractionStyle
+  RenderingCore
+  RenderingOpenGL2
+  GUISupportQt
+)
 
 include("openroad")
 set(CMAKE_INCLUDE_CURRENT_DIR ON)
 
-if (Qt5_FOUND AND BUILD_GUI)
+if (Qt5_FOUND AND BUILD_GUI AND VTK_FOUND)
   message(STATUS "GUI is enabled")
   set(CMAKE_AUTOMOC ON)
   set(CMAKE_AUTORCC ON)
@@ -84,9 +96,24 @@ if (Qt5_FOUND AND BUILD_GUI)
       Qt5::Widgets
       Qt5::Charts
       OpenGL::GL
+      VTK::CommonCore
+      VTK::CommonDataModel
+      VTK::FiltersSources
+      VTK::InteractionStyle
+      VTK::RenderingCore
+      VTK::RenderingOpenGL2
+      VTK::GUISupportQt
       utl_lib
       Boost::boost
       OpenSTA
+  )
+
+  # VTK module autoinit for rendering backend
+  vtk_module_autoinit(
+    TARGETS gui
+    MODULES VTK::RenderingOpenGL2
+            VTK::InteractionStyle
+            VTK::GUISupportQt
   )
 
   # Disable LTO for gui. LTO causes a crash with Qt plugin loading
@@ -103,7 +130,11 @@ messages(
 
 else()
   if(BUILD_GUI)
-    message(STATUS "QT5 not found. GUI is disabled")
+    if(NOT Qt5_FOUND)
+      message(STATUS "Qt5 not found. GUI is disabled")
+    elseif(NOT VTK_FOUND)
+      message(STATUS "VTK not found. GUI is disabled")
+    endif()
   else()
     message(STATUS "GUI is not enabled")
   endif()
