@@ -20,7 +20,8 @@
 
 namespace {
 constexpr float kInitialDistanceFactor = 3.0f;
-constexpr float kLayerGapFactor = 2.0f;
+constexpr float kZHeightScale = 10.0f;
+constexpr int kChipletSeparation = 1;
 constexpr float kMinDistanceCheck = 100.0f;
 constexpr float kDefaultDistance = 1000.0f;
 constexpr float kDefaultSafeSize = 1000.0f;
@@ -77,7 +78,7 @@ void Chiplet3DWidget::buildGeometries()
   const odb::dbTransform center_transform
       = odb::dbTransform(odb::Point3D(-global_cuboid.xCenter(),
                                       -global_cuboid.yCenter(),
-                                      -global_cuboid.zCenter()));
+                                      -global_cuboid.zMin()));
 
   vertices_.clear();
   indices_lines_.clear();
@@ -89,7 +90,7 @@ void Chiplet3DWidget::buildGeometries()
 
   const float dx = global_cuboid.dx();
   const float dy = global_cuboid.dy();
-  const float dz = global_cuboid.dz() * kLayerGapFactor;
+  const float dz = global_cuboid.dz() * kZHeightScale;
   bounding_radius_ = std::sqrt(dx * dx + dy * dy + dz * dz) / 2.0f;
 
   distance_ = bounding_radius_ * kInitialDistanceFactor;
@@ -100,13 +101,22 @@ void Chiplet3DWidget::buildGeometries()
   int index = 0;
   for (const auto& chip : model.getChips()) {
     odb::Cuboid draw_cuboid = chip.cuboid;
+
+    draw_cuboid.set_xlo(draw_cuboid.xMin() + kChipletSeparation);
+    draw_cuboid.set_ylo(draw_cuboid.yMin() + kChipletSeparation);
+    draw_cuboid.set_zlo(draw_cuboid.zMin() + kChipletSeparation);
+    draw_cuboid.set_xhi(draw_cuboid.xMax() - kChipletSeparation);
+    draw_cuboid.set_yhi(draw_cuboid.yMax() - kChipletSeparation);
+    draw_cuboid.set_zhi(draw_cuboid.zMax() - kChipletSeparation);
+
     center_transform.apply(draw_cuboid);
-    // Color by Depth (proportional to Z)
+
     const QVector3D color = kColorPalette[index++ % kColorPalette.size()];
 
     const uint32_t base = vertices_.size();
     for (const auto& p : draw_cuboid.getPoints()) {
-      vertices_.push_back({QVector3D(p.x(), p.y(), p.z()), color});
+      vertices_.push_back(
+          {QVector3D(p.x(), p.y(), p.z() * kZHeightScale), color});
     }
 
     // Add line indices for a cube (12 lines)
