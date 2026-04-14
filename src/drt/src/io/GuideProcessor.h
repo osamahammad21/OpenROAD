@@ -180,6 +180,14 @@ class GuideProcessor
                        const std::map<Point3D, frBlockObjectSet>& gcell_pin_map,
                        frBlockObjectMap<std::set<Point3D>>& pin_gcell_map,
                        bool via_access_only) const;
+
+  void genGuides_pins(const TrackIntervalsByLayer& intvs,
+                      const std::map<Point3D, frBlockObjectSet>& gcell_pin_map,
+                      frBlockObjectMap<std::set<Point3D>>& pin_gcell_map) const;
+
+  void genGuides_translate(const std::vector<frRect>& original_rects,
+                           std::vector<frRect>& translated_rects,
+                           bool via_access_only) const;
   /**
    * Initializes a map of gcell location to set of pins
    *

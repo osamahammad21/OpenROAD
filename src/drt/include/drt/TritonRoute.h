@@ -76,6 +76,7 @@ struct ParamStruct
   bool singleStepDR = false;
   int minAccessPoints = -1;
   bool saveGuideUpdates = false;
+  bool patchGuides = false;
   std::string repairPDNLayerName;
   int num_threads;
 };

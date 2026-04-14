@@ -1005,6 +1005,9 @@ void GuideProcessor::patchGuides(frNet* net,
   if (isPinCoveredByGuides(pin, guides)) {
     return;
   }
+  if (!router_cfg_->PATCH_GUIDES) {
+    logger_->error(DRT, 1008, "Pin {} not covered by guides.", getPinName(pin));
+  }
   // no guide was found that overlaps with any of the pin shapes, then we patch
   // the guides
 
@@ -1037,7 +1040,9 @@ void GuideProcessor::genGuides_prep(const std::vector<frRect>& rects,
                                     TrackIntervalsByLayer& intvs)
 {
   initGuideIntervals(rects, getDesign(), intvs);
-  addTouchingGuidesBridges(intvs, logger_);
+  if (router_cfg_->PATCH_GUIDES) {
+    addTouchingGuidesBridges(intvs, logger_);
+  }
 }
 
 namespace split {
@@ -1173,6 +1178,40 @@ void addSplitRect(const frCoord track_idx,
 }
 }  // namespace split
 
+void GuideProcessor::genGuides_pins(
+    const TrackIntervalsByLayer& intvs,
+    const std::map<Point3D, frBlockObjectSet>& gcell_pin_map,
+    frBlockObjectMap<std::set<Point3D>>& pin_gcell_map) const
+{
+  std::vector<std::map<frCoord, std::map<frCoord, frBlockObjectSet>>>
+      pin_helper(getTech()->getLayers().size());
+  for (const auto& [point, pins] : gcell_pin_map) {
+    if (getTech()->getLayer(point.z())->isHorizontal()) {
+      pin_helper[point.z()][point.y()][point.x()] = pins;
+    } else {
+      pin_helper[point.z()][point.x()][point.y()] = pins;
+    }
+  }
+  for (int layer_num = 0; layer_num < (int) intvs.size(); layer_num++) {
+    const bool is_horizontal = getTech()->getLayer(layer_num)->isHorizontal();
+    for (auto& [track_idx, curr_intvs] : intvs[layer_num]) {
+      for (const auto& intv : curr_intvs) {
+        auto begin_idx = intv.lower();
+        auto end_idx = intv.upper();
+        std::set<frCoord> split_indices;
+        split::splitByPins(pin_helper,
+                           layer_num,
+                           is_horizontal,
+                           track_idx,
+                           begin_idx,
+                           end_idx,
+                           pin_gcell_map,
+                           split_indices);
+      }
+    }
+  }
+}
+
 void GuideProcessor::genGuides_split(
     std::vector<frRect>& rects,
     const TrackIntervalsByLayer& intvs,
@@ -1286,6 +1325,36 @@ void GuideProcessor::genGuides_split(
     }
   }
   rects.shrink_to_fit();
+}
+
+void GuideProcessor::genGuides_translate(
+    const std::vector<frRect>& original_rects,
+    std::vector<frRect>& translated_rects,
+    bool via_access_only) const
+{
+  translated_rects.clear();
+  for (const auto& rect : original_rects) {
+    const auto layer_num = rect.getLayerNum();
+    const auto bbox = rect.getBBox();
+    const auto min_idx = getDesign()->getTopBlock()->getGCellIdx(
+        {bbox.xMin() + 1, bbox.yMin() + 1});
+    const auto max_idx = getDesign()->getTopBlock()->getGCellIdx(
+        {bbox.xMax() - 1, bbox.yMax() - 1});
+    if (via_access_only && layer_num <= router_cfg_->VIA_ACCESS_LAYERNUM) {
+      for (int x = min_idx.x(); x <= max_idx.x(); x++) {
+        for (int y = min_idx.y(); y <= max_idx.y(); y++) {
+          translated_rects.push_back(frRect(x, y, x, y, layer_num, nullptr));
+        }
+      }
+    } else {
+      translated_rects.push_back(frRect(min_idx.x(),
+                                        min_idx.y(),
+                                        max_idx.x(),
+                                        max_idx.y(),
+                                        layer_num,
+                                        nullptr));
+    }
+  }
 }
 
 void GuideProcessor::mapPinShapesToGCells(
@@ -1416,20 +1485,26 @@ std::vector<std::pair<frBlockObject*, odb::Point>> GuideProcessor::genGuides(
   for (auto& bterm : net->getBTerms()) {
     pins.push_back(bterm);
   }
-
+  std::vector<frRect> original_rects = rects;
   // Run for 3 iterations max
-  for (int i = 0; i < 4; i++) {
+  const int max_iterations = router_cfg_->PATCH_GUIDES ? 4 : 3;
+  for (int i = 0; i < max_iterations; i++) {
     const bool force_pin_feed_through = (i >= 2);
     const bool via_access_only = (i == 0);
-    const bool patch_guides_on_failure = (i == 2);
+    const bool patch_guides_on_failure = (i == 2) && router_cfg_->PATCH_GUIDES;
     if (i != 2)  // no change in rects in this iteration
     {
-      genGuides_split(
-          rects,
-          intvs,
-          gcell_pin_map,
-          pin_gcell_map,
-          via_access_only);  // split on LU intersecting guides and pins
+      if (router_cfg_->PATCH_GUIDES) {
+        genGuides_split(
+            rects,
+            intvs,
+            gcell_pin_map,
+            pin_gcell_map,
+            via_access_only);  // split on LU intersecting guides and pins
+      } else {
+        genGuides_pins(intvs, gcell_pin_map, pin_gcell_map);
+        genGuides_translate(original_rects, rects, via_access_only);
+      }
       if (pin_gcell_map.empty()) {
         logger_->warn(DRT, 214, "genGuides empty gcell_pin_map.");
         debugPrint(logger_,

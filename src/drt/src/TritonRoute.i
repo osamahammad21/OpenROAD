@@ -65,6 +65,7 @@ void detailed_route_cmd(const char* outputMazeFile,
                         bool singleStepDR,
                         int minAccessPoints,
                         bool saveGuideUpdates,
+                        bool patchGuides,
                         const char* repairPDNLayerName,
                         int drcReportIterStep)
 {
@@ -92,6 +93,7 @@ void detailed_route_cmd(const char* outputMazeFile,
                     singleStepDR,
                     minAccessPoints,
                     saveGuideUpdates,
+                    patchGuides,
                     repairPDNLayerName,
                     num_threads});
   router->main();
