@@ -514,14 +514,19 @@ void OpenRoad::writeCdl(const char* out_filename,
 void OpenRoad::read3Dbv(const std::string& filename)
 {
   odb::ThreeDBlox parser(logger_, db_, sta_);
-  parser.readDbv(filename);
+  std::vector<odb::dbChip*> chips = parser.readDbv(filename);
+  if (chips.size() == 1) {
+    // 3DBV with one chiplet definition only is considered the top design.
+    db_->setTopChip(chips.at(0));
+  }
 }
 
 void OpenRoad::read3Dbx(const std::string& filename)
 {
   odb::ThreeDBlox parser(logger_, db_, sta_);
-  parser.readDbx(filename);
-  db_->triggerPostRead3Dbx(db_->getChip());
+  odb::dbChip* chip = parser.readDbx(filename);
+  db_->setTopChip(chip);
+  db_->triggerPostRead3Dbx(chip);
   check3DBlox();
 }
 

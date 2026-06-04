@@ -56,7 +56,7 @@ ThreeDBlox::ThreeDBlox(utl::Logger* logger, odb::dbDatabase* db, sta::Sta* sta)
 {
 }
 
-void ThreeDBlox::readDbv(const std::string& dbv_file)
+std::vector<dbChip*> ThreeDBlox::readDbv(const std::string& dbv_file)
 {
   read_files_.insert(std::filesystem::absolute(dbv_file).string());
   DbvParser parser(logger_);
@@ -80,9 +80,12 @@ void ThreeDBlox::readDbv(const std::string& dbv_file)
     }
   }
   readHeaderIncludes(data.header.includes);
+  std::vector<dbChip*> chips;
+  chips.reserve(data.chiplet_defs.size());
   for (const auto& [_, chiplet] : data.chiplet_defs) {
-    createChiplet(chiplet);
+    chips.push_back(createChiplet(chiplet));
   }
+  return chips;
 }
 
 void ThreeDBlox::buildChipNetsFromVerilog(dbChip* chip, const DbxData& data)
@@ -173,7 +176,7 @@ void ThreeDBlox::buildChipNetsFromVerilog(dbChip* chip, const DbxData& data)
   }
 }
 
-void ThreeDBlox::readDbx(const std::string& dbx_file)
+dbChip* ThreeDBlox::readDbx(const std::string& dbx_file)
 {
   read_files_.insert(std::filesystem::absolute(dbx_file).string());
   DbxParser parser(logger_);
@@ -181,13 +184,13 @@ void ThreeDBlox::readDbx(const std::string& dbx_file)
   readHeaderIncludes(data.header.includes);
   dbChip* chip = createDesignTopChiplet(data.design);
   for (const auto& [_, chip_inst] : data.chiplet_instances) {
-    createChipInst(chip_inst);
+    createChipInst(chip_inst, chip);
   }
 
   buildChipNetsFromVerilog(chip, data);
 
   for (const auto& [_, connection] : data.connections) {
-    createConnection(connection);
+    createConnection(connection, chip);
   }
   calculateSize(chip);
   for (const auto& [_, assertion] : data.path_assertions) {
@@ -195,10 +198,12 @@ void ThreeDBlox::readDbx(const std::string& dbx_file)
     for (const auto& entry : assertion.entries) {
       // Resolve the dotted path string to a live DB object
       std::vector<dbChipInst*> path_insts;
-      dbChipRegionInst* region_inst = resolvePath(entry.region, path_insts);
+      dbChipRegionInst* region_inst
+          = resolvePath(entry.region, chip, path_insts);
       chip_path->addEntry(path_insts, region_inst, entry.negated);
     }
   }
+  return chip;
 }
 
 void ThreeDBlox::check()
@@ -399,7 +404,7 @@ static std::string getFileName(const std::string& tech_file_path)
   return tech_file_path_fs.stem().string();
 }
 
-void ThreeDBlox::createChiplet(const ChipletDef& chiplet)
+dbChip* ThreeDBlox::createChiplet(const ChipletDef& chiplet)
 {
   dbTech* tech = nullptr;
 
@@ -515,6 +520,7 @@ void ThreeDBlox::createChiplet(const ChipletDef& chiplet)
   for (const auto& [_, region] : chiplet.regions) {
     createRegion(region, chip);
   }
+  return chip;
 }
 
 static dbChipRegion::Side getChipRegionSide(const std::string& side,
@@ -663,11 +669,11 @@ dbChip* ThreeDBlox::createDesignTopChiplet(const DesignDef& design)
           chip, "verilog_file", design.external.verilog_file.c_str());
     }
   }
-  db_->setTopChip(chip);
   return chip;
 }
 
-void ThreeDBlox::createChipInst(const ChipletInst& chip_inst)
+void ThreeDBlox::createChipInst(const ChipletInst& chip_inst,
+                                dbChip* parent_chip)
 {
   auto chip = db_->findChip(chip_inst.reference.c_str());
   if (chip == nullptr) {
@@ -678,7 +684,7 @@ void ThreeDBlox::createChipInst(const ChipletInst& chip_inst)
                    chip_inst.reference,
                    chip_inst.name);
   }
-  dbChipInst* inst = dbChipInst::create(db_->getChip(), chip, chip_inst.name);
+  dbChipInst* inst = dbChipInst::create(parent_chip, chip, chip_inst.name);
   auto orient_str = chip_inst.orient;
   if (dup_orient_map.contains(orient_str)) {
     orient_str = dup_orient_map[orient_str];
@@ -715,6 +721,7 @@ static std::vector<std::string> splitPath(const std::string& path)
 }
 
 dbChipRegionInst* ThreeDBlox::resolvePath(const std::string& path,
+                                          dbChip* parent_chip,
                                           std::vector<dbChipInst*>& path_insts)
 {
   if (path == "~") {
@@ -743,7 +750,7 @@ dbChipRegionInst* ThreeDBlox::resolvePath(const std::string& path,
 
   // Traverse hierarchy and find region
   path_insts.reserve(path_parts.size());
-  dbChip* curr_chip = db_->getChip();
+  dbChip* curr_chip = parent_chip;
   dbChipInst* curr_chip_inst = nullptr;
 
   for (const auto& inst_name : path_parts) {
@@ -768,16 +775,18 @@ dbChipRegionInst* ThreeDBlox::resolvePath(const std::string& path,
   }
   return region;
 }
-void ThreeDBlox::createConnection(const Connection& connection)
+void ThreeDBlox::createConnection(const Connection& connection,
+                                  dbChip* parent_chip)
 {
   auto top_path = connection.top;
   auto bottom_path = connection.bot;
   std::vector<dbChipInst*> top_region_path;
   std::vector<dbChipInst*> bottom_region_path;
-  auto top_region = resolvePath(top_path, top_region_path);
-  auto bottom_region = resolvePath(bottom_path, bottom_region_path);
+  auto top_region = resolvePath(top_path, parent_chip, top_region_path);
+  auto bottom_region
+      = resolvePath(bottom_path, parent_chip, bottom_region_path);
   auto conn = odb::dbChipConn::create(connection.name,
-                                      db_->getChip(),
+                                      parent_chip,
                                       top_region_path,
                                       top_region,
                                       bottom_region_path,

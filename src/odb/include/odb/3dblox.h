@@ -39,8 +39,8 @@ class ThreeDBlox
  public:
   ThreeDBlox(utl::Logger* logger, odb::dbDatabase* db, sta::Sta* sta = nullptr);
   ~ThreeDBlox() = default;
-  void readDbv(const std::string& dbv_file);
-  void readDbx(const std::string& dbx_file);
+  std::vector<dbChip*> readDbv(const std::string& dbv_file);
+  dbChip* readDbx(const std::string& dbx_file);
   void readBMap(const std::string& bmap_file);
   void check();
   void writeDbv(const std::string& dbv_file, odb::dbChip* chip);
@@ -49,15 +49,16 @@ class ThreeDBlox
   void writeVerilog(const std::string& verilog_file, odb::dbChip* chip);
 
  private:
-  void createChiplet(const ChipletDef& chiplet);
-  void createRegion(const ChipletRegion& region, dbChip* chip);
+  dbChip* createChiplet(const ChipletDef& chiplet);
+  void createRegion(const ChipletRegion& region, dbChip* parent_chip);
   dbChip* createDesignTopChiplet(const DesignDef& design);
-  void createChipInst(const ChipletInst& chip_inst);
-  void createConnection(const Connection& connection);
+  void createChipInst(const ChipletInst& chip_inst, dbChip* parent_chip);
+  void createConnection(const Connection& connection, dbChip* parent_chip);
   void createBump(const BumpMapEntry& entry, dbChipRegion* chip_region);
   std::pair<dbInst*, dbBTerm*> createBump(const BumpMapEntry& entry,
                                           dbBlock* block);
   dbChipRegionInst* resolvePath(const std::string& path,
+                                dbChip* parent_chip,
                                 std::vector<dbChipInst*>& path_insts);
   void readHeaderIncludes(const std::vector<std::string>& includes);
   void calculateSize(dbChip* chip);

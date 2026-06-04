@@ -764,6 +764,7 @@ void dbDatabase::setTopChip(dbChip* chip)
 {
   _dbDatabase* db = (_dbDatabase*) this;
   db->chip_ = chip->getImpl()->getOID();
+  constructUnfoldedModel();
 }
 
 dbSet<dbLib> dbDatabase::getLibs()
@@ -1188,7 +1189,6 @@ void dbDatabase::triggerPostRead3Dbx(dbChip* chip)
   for (dbDatabaseObserver* observer : db->observers_) {
     observer->postRead3Dbx(chip);
   }
-  constructUnfoldedModel();
 }
 
 void dbDatabase::triggerPostReadDb()

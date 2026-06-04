@@ -23,7 +23,8 @@ class DbvFixture : public tst::Fixture
     dbTech::create(db_.get(), "tech");
     ThreeDBlox parser(&logger_, db_.get());
     std::string path = getFilePath(prefix + "data/example.3dbx");
-    parser.readDbx(path);
+    auto chip = parser.readDbx(path);
+    db_->setTopChip(chip);
   }
 };
 
