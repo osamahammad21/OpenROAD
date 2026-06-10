@@ -2,18 +2,21 @@
 // Copyright (c) 2019-2025, The OpenROAD Authors
 
 // Generator Code Begin Cpp
-#include "dbUnfoldedNet.h"
+#include "dbUnfoldedChipNet.h"
 
 #include "dbChipNet.h"
 #include "dbCore.h"
 #include "dbDatabase.h"
 #include "dbTable.h"
-#include "dbUnfoldedBump.h"
+#include "dbUnfoldedChipBumpInst.h"
 #include "odb/db.h"
+// User Code Begin Includes
+#include <vector>
+// User Code End Includes
 namespace odb {
-template class dbTable<_dbUnfoldedNet>;
+template class dbTable<_dbUnfoldedChipNet>;
 
-bool _dbUnfoldedNet::operator==(const _dbUnfoldedNet& rhs) const
+bool _dbUnfoldedChipNet::operator==(const _dbUnfoldedChipNet& rhs) const
 {
   // NOLINTBEGIN(readability-simplify-boolean-expr)
   if (chip_net_ != rhs.chip_net_) {
@@ -24,30 +27,30 @@ bool _dbUnfoldedNet::operator==(const _dbUnfoldedNet& rhs) const
   // NOLINTEND(readability-simplify-boolean-expr)
 }
 
-bool _dbUnfoldedNet::operator<(const _dbUnfoldedNet& rhs) const
+bool _dbUnfoldedChipNet::operator<(const _dbUnfoldedChipNet& rhs) const
 {
   return true;
 }
 
-_dbUnfoldedNet::_dbUnfoldedNet(_dbDatabase* db)
+_dbUnfoldedChipNet::_dbUnfoldedChipNet(_dbDatabase* db)
 {
 }
 
-dbIStream& operator>>(dbIStream& stream, _dbUnfoldedNet& obj)
+dbIStream& operator>>(dbIStream& stream, _dbUnfoldedChipNet& obj)
 {
   stream >> obj.chip_net_;
   stream >> obj.connected_bumps_;
   return stream;
 }
 
-dbOStream& operator<<(dbOStream& stream, const _dbUnfoldedNet& obj)
+dbOStream& operator<<(dbOStream& stream, const _dbUnfoldedChipNet& obj)
 {
   stream << obj.chip_net_;
   stream << obj.connected_bumps_;
   return stream;
 }
 
-void _dbUnfoldedNet::collectMemInfo(MemInfo& info)
+void _dbUnfoldedChipNet::collectMemInfo(MemInfo& info)
 {
   info.cnt++;
   info.size += sizeof(*this);
@@ -57,13 +60,13 @@ void _dbUnfoldedNet::collectMemInfo(MemInfo& info)
 
 ////////////////////////////////////////////////////////////////////
 //
-// dbUnfoldedNet - Methods
+// dbUnfoldedChipNet - Methods
 //
 ////////////////////////////////////////////////////////////////////
 
-dbChipNet* dbUnfoldedNet::getChipNet() const
+dbChipNet* dbUnfoldedChipNet::getChipNet() const
 {
-  _dbUnfoldedNet* obj = (_dbUnfoldedNet*) this;
+  _dbUnfoldedChipNet* obj = (_dbUnfoldedChipNet*) this;
   if (obj->chip_net_ == 0) {
     return nullptr;
   }
@@ -71,18 +74,20 @@ dbChipNet* dbUnfoldedNet::getChipNet() const
   return (dbChipNet*) par->chip_net_tbl_->getPtr(obj->chip_net_);
 }
 
-// User Code Begin dbUnfoldedNetPublicMethods
-std::vector<dbUnfoldedBump*> dbUnfoldedNet::getConnectedBumps() const
+// User Code Begin dbUnfoldedChipNetPublicMethods
+std::vector<dbUnfoldedChipBumpInst*> dbUnfoldedChipNet::getConnectedBumps()
+    const
 {
-  _dbUnfoldedNet* obj = (_dbUnfoldedNet*) this;
+  _dbUnfoldedChipNet* obj = (_dbUnfoldedChipNet*) this;
   _dbDatabase* db = (_dbDatabase*) obj->getOwner();
-  std::vector<dbUnfoldedBump*> bumps;
+  std::vector<dbUnfoldedChipBumpInst*> bumps;
   bumps.reserve(obj->connected_bumps_.size());
   for (const auto& id : obj->connected_bumps_) {
-    bumps.push_back((dbUnfoldedBump*) db->unfolded_bump_tbl_->getPtr(id));
+    bumps.push_back(
+        (dbUnfoldedChipBumpInst*) db->unfolded_chip_bump_inst_tbl_->getPtr(id));
   }
   return bumps;
 }
-// User Code End dbUnfoldedNetPublicMethods
+// User Code End dbUnfoldedChipNetPublicMethods
 }  // namespace odb
 // Generator Code End Cpp

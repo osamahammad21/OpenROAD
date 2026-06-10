@@ -1,5 +1,5 @@
 {
-  "name": "dbUnfoldedBump",
+  "name": "dbUnfoldedChipBumpInst",
   "type": "dbObject",
   "fields": [
     {
@@ -10,13 +10,13 @@
     },
     {
       "name": "parent_region_",
-      "type": "dbId<_dbUnfoldedRegion>",
+      "type": "dbId<_dbUnfoldedChipRegionInst>",
       "flags": ["no-set"],
       "parent": "dbDatabase"
     },
     {
       "name": "region_next_",
-      "type": "dbId<_dbUnfoldedBump>",
+      "type": "dbId<_dbUnfoldedChipBumpInst>",
       "flags": ["private"]
     }
   ],
@@ -27,8 +27,8 @@
     "dbChipBumpInst.h",
     "dbChipBump.h",
     "dbInst.h",
-    "dbUnfoldedRegion.h",
-    "dbUnfoldedChip.h",
+    "dbUnfoldedChipRegionInst.h",
+    "dbUnfoldedChipInst.h",
     "odb/geom.h"
   ]
 }

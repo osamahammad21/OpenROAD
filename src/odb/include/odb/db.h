@@ -178,11 +178,11 @@ class dbTechLayerTwoWiresForbiddenSpcRule;
 class dbTechLayerVoltageSpacing;
 class dbTechLayerWidthTableRule;
 class dbTechLayerWrongDirSpacingRule;
-class dbUnfoldedBump;
-class dbUnfoldedChip;
-class dbUnfoldedConn;
-class dbUnfoldedNet;
-class dbUnfoldedRegion;
+class dbUnfoldedChipBumpInst;
+class dbUnfoldedChipConn;
+class dbUnfoldedChipInst;
+class dbUnfoldedChipNet;
+class dbUnfoldedChipRegionInst;
 // Generator Code End ClassDeclarations
 
 // Extraction Objects
@@ -7623,15 +7623,15 @@ class dbDatabase : public dbObject
 
   dbSet<dbChipNet> getChipNets() const;
 
-  dbSet<dbUnfoldedChip> getUnfoldedChips() const;
+  dbSet<dbUnfoldedChipInst> getUnfoldedChipInsts() const;
 
-  dbSet<dbUnfoldedRegion> getUnfoldedRegions() const;
+  dbSet<dbUnfoldedChipRegionInst> getUnfoldedChipRegionInsts() const;
 
-  dbSet<dbUnfoldedBump> getUnfoldedBumps() const;
+  dbSet<dbUnfoldedChipBumpInst> getUnfoldedChipBumpInsts() const;
 
-  dbSet<dbUnfoldedConn> getUnfoldedConns() const;
+  dbSet<dbUnfoldedChipConn> getUnfoldedChipConns() const;
 
-  dbSet<dbUnfoldedNet> getUnfoldedNets() const;
+  dbSet<dbUnfoldedChipNet> getUnfoldedChipNets() const;
 
   // User Code Begin dbDatabase
 
@@ -7817,7 +7817,7 @@ class dbDatabase : public dbObject
   /// Find an unfolded chip by its full path name (slash-joined chip-inst
   /// names). Returns nullptr if no match.
   ///
-  dbUnfoldedChip* findUnfoldedChip(const std::string& path) const;
+  dbUnfoldedChipInst* findUnfoldedChip(const std::string& path) const;
   // User Code End dbDatabase
 };
 
@@ -11410,29 +11410,39 @@ class dbTechLayerWrongDirSpacingRule : public dbObject
   // User Code End dbTechLayerWrongDirSpacingRule
 };
 
-class dbUnfoldedBump : public dbObject
+class dbUnfoldedChipBumpInst : public dbObject
 {
  public:
   dbChipBumpInst* getChipBumpInst() const;
 
-  dbUnfoldedRegion* getParentRegion() const;
+  dbUnfoldedChipRegionInst* getParentRegion() const;
 
-  // User Code Begin dbUnfoldedBump
+  // User Code Begin dbUnfoldedChipBumpInst
   Point3D getGlobalPosition() const;
-  // User Code End dbUnfoldedBump
+  // User Code End dbUnfoldedChipBumpInst
 };
 
-class dbUnfoldedChip : public dbObject
+class dbUnfoldedChipConn : public dbObject
+{
+ public:
+  dbChipConn* getChipConn() const;
+
+  dbUnfoldedChipRegionInst* getTopRegion() const;
+
+  dbUnfoldedChipRegionInst* getBottomRegion() const;
+};
+
+class dbUnfoldedChipInst : public dbObject
 {
  public:
   const std::string& getName() const;
 
   dbTransform getTransform() const;
 
-  // User Code Begin dbUnfoldedChip
+  // User Code Begin dbUnfoldedChipInst
   Cuboid getCuboid() const;
 
-  dbSet<dbUnfoldedRegion> getRegions() const;
+  dbSet<dbUnfoldedChipRegionInst> getRegions() const;
 
   ///
   /// Return the chip-instance path that uniquely identifies this unfolded
@@ -11444,31 +11454,21 @@ class dbUnfoldedChip : public dbObject
   /// Find the unfolded region within this chip whose source region instance
   /// matches `source`. Returns nullptr if no match.
   ///
-  dbUnfoldedRegion* findRegion(dbChipRegionInst* source) const;
-  // User Code End dbUnfoldedChip
+  dbUnfoldedChipRegionInst* findRegion(dbChipRegionInst* source) const;
+  // User Code End dbUnfoldedChipInst
 };
 
-class dbUnfoldedConn : public dbObject
-{
- public:
-  dbChipConn* getChipConn() const;
-
-  dbUnfoldedRegion* getTopRegion() const;
-
-  dbUnfoldedRegion* getBottomRegion() const;
-};
-
-class dbUnfoldedNet : public dbObject
+class dbUnfoldedChipNet : public dbObject
 {
  public:
   dbChipNet* getChipNet() const;
 
-  // User Code Begin dbUnfoldedNet
-  std::vector<dbUnfoldedBump*> getConnectedBumps() const;
-  // User Code End dbUnfoldedNet
+  // User Code Begin dbUnfoldedChipNet
+  std::vector<dbUnfoldedChipBumpInst*> getConnectedBumps() const;
+  // User Code End dbUnfoldedChipNet
 };
 
-class dbUnfoldedRegion : public dbObject
+class dbUnfoldedChipRegionInst : public dbObject
 {
  public:
   enum class EffectiveSide
@@ -11481,9 +11481,9 @@ class dbUnfoldedRegion : public dbObject
 
   dbChipRegionInst* getChipRegionInst() const;
 
-  dbUnfoldedChip* getParentChip() const;
+  dbUnfoldedChipInst* getParentChip() const;
 
-  // User Code Begin dbUnfoldedRegion
+  // User Code Begin dbUnfoldedChipRegionInst
   Cuboid getCuboid() const;
 
   EffectiveSide getEffectiveSide() const;
@@ -11496,8 +11496,8 @@ class dbUnfoldedRegion : public dbObject
 
   int getSurfaceZ() const;
 
-  dbSet<dbUnfoldedBump> getBumps() const;
-  // User Code End dbUnfoldedRegion
+  dbSet<dbUnfoldedChipBumpInst> getBumps() const;
+  // User Code End dbUnfoldedChipRegionInst
 };
 
 // Generator Code End ClassDefinition

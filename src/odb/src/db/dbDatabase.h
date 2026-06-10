@@ -290,11 +290,11 @@ class _dbChipRegionInst;
 class _dbChipConn;
 class _dbChipBumpInst;
 class _dbChipNet;
-class _dbUnfoldedChip;
-class _dbUnfoldedRegion;
-class _dbUnfoldedBump;
-class _dbUnfoldedConn;
-class _dbUnfoldedNet;
+class _dbUnfoldedChipInst;
+class _dbUnfoldedChipRegionInst;
+class _dbUnfoldedChipBumpInst;
+class _dbUnfoldedChipConn;
+class _dbUnfoldedChipNet;
 // User Code Begin Classes
 class dbPropertyItr;
 class dbChipInstItr;
@@ -302,8 +302,8 @@ class dbChipRegionInstItr;
 class dbChipConnItr;
 class dbChipBumpInstItr;
 class dbChipNetItr;
-class dbUnfoldedRegionItr;
-class dbUnfoldedBumpItr;
+class dbUnfoldedChipRegionInstItr;
+class dbUnfoldedChipBumpInstItr;
 class _dbNameCache;
 class _dbTech;
 class _dbLib;
@@ -345,11 +345,11 @@ class _dbDatabase : public _dbObject
   dbTable<_dbChipConn>* chip_conn_tbl_;
   dbTable<_dbChipBumpInst>* chip_bump_inst_tbl_;
   dbTable<_dbChipNet>* chip_net_tbl_;
-  dbTable<_dbUnfoldedChip>* unfolded_chip_tbl_;
-  dbTable<_dbUnfoldedRegion>* unfolded_region_tbl_;
-  dbTable<_dbUnfoldedBump>* unfolded_bump_tbl_;
-  dbTable<_dbUnfoldedConn>* unfolded_conn_tbl_;
-  dbTable<_dbUnfoldedNet>* unfolded_net_tbl_;
+  dbTable<_dbUnfoldedChipInst>* unfolded_chip_inst_tbl_;
+  dbTable<_dbUnfoldedChipRegionInst>* unfolded_chip_region_inst_tbl_;
+  dbTable<_dbUnfoldedChipBumpInst>* unfolded_chip_bump_inst_tbl_;
+  dbTable<_dbUnfoldedChipConn>* unfolded_chip_conn_tbl_;
+  dbTable<_dbUnfoldedChipNet>* unfolded_chip_net_tbl_;
 
   // User Code Begin Fields
   dbTable<_dbTech, 2>* tech_tbl_;
@@ -361,8 +361,8 @@ class _dbDatabase : public _dbObject
   dbChipRegionInstItr* chip_region_inst_itr_;
   dbChipConnItr* chip_conn_itr_;
   dbChipBumpInstItr* chip_bump_inst_itr_;
-  dbUnfoldedRegionItr* unfolded_region_itr_;
-  dbUnfoldedBumpItr* unfolded_bump_itr_;
+  dbUnfoldedChipRegionInstItr* unfolded_region_itr_;
+  dbUnfoldedChipBumpInstItr* unfolded_bump_itr_;
   dbChipNetItr* chip_net_itr_;
   int unique_id_;
   bool hierarchy_;

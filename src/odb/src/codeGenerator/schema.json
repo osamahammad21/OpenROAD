@@ -211,22 +211,22 @@
       "includes": ["dbChipNet.h", "dbChip.h"]
     },
     {
-      "name": "dbUnfoldedRegionItr",
-      "parentObject": "dbUnfoldedRegion",
-      "tableName": "unfolded_region_tbl",
+      "name": "dbUnfoldedChipRegionInstItr",
+      "parentObject": "dbUnfoldedChipRegionInst",
+      "tableName": "unfolded_chip_region_inst_tbl",
       "reversible": "true",
       "orderReversed": "true",
       "sequential": 0,
-      "includes": ["dbUnfoldedRegion.h", "dbUnfoldedChip.h"]
+      "includes": ["dbUnfoldedChipRegionInst.h", "dbUnfoldedChipInst.h"]
     },
     {
-      "name": "dbUnfoldedBumpItr",
-      "parentObject": "dbUnfoldedBump",
-      "tableName": "unfolded_bump_tbl",
+      "name": "dbUnfoldedChipBumpInstItr",
+      "parentObject": "dbUnfoldedChipBumpInst",
+      "tableName": "unfolded_chip_bump_inst_tbl",
       "reversible": "true",
       "orderReversed": "true",
       "sequential": 0,
-      "includes": ["dbUnfoldedBump.h", "dbUnfoldedRegion.h"]
+      "includes": ["dbUnfoldedChipBumpInst.h", "dbUnfoldedChipRegionInst.h"]
     }
   ],
   "relations":[
@@ -565,37 +565,37 @@
     },
     {
       "parent":"dbDatabase",
-      "child":"dbUnfoldedChip",
+      "child":"dbUnfoldedChipInst",
       "type":"1_n",
-      "tbl_name":"unfolded_chip_tbl_",
+      "tbl_name":"unfolded_chip_inst_tbl_",
       "flags": ["no-serial"]
     },
     {
       "parent":"dbDatabase",
-      "child":"dbUnfoldedRegion",
+      "child":"dbUnfoldedChipRegionInst",
       "type":"1_n",
-      "tbl_name":"unfolded_region_tbl_",
+      "tbl_name":"unfolded_chip_region_inst_tbl_",
       "flags": ["no-serial"]
     },
     {
       "parent":"dbDatabase",
-      "child":"dbUnfoldedBump",
+      "child":"dbUnfoldedChipBumpInst",
       "type":"1_n",
-      "tbl_name":"unfolded_bump_tbl_",
+      "tbl_name":"unfolded_chip_bump_inst_tbl_",
       "flags": ["no-serial"]
     },
     {
       "parent":"dbDatabase",
-      "child":"dbUnfoldedConn",
+      "child":"dbUnfoldedChipConn",
       "type":"1_n",
-      "tbl_name":"unfolded_conn_tbl_",
+      "tbl_name":"unfolded_chip_conn_tbl_",
       "flags": ["no-serial"]
     },
     {
       "parent":"dbDatabase",
-      "child":"dbUnfoldedNet",
+      "child":"dbUnfoldedChipNet",
       "type":"1_n",
-      "tbl_name":"unfolded_net_tbl_",
+      "tbl_name":"unfolded_chip_net_tbl_",
       "flags": ["no-serial"]
     },
     {

@@ -160,11 +160,11 @@ add_library(db
     dbTechLayerVoltageSpacing.cpp
     dbTechLayerWidthTableRule.cpp
     dbTechLayerWrongDirSpacingRule.cpp
-    dbUnfoldedBump.cpp
-    dbUnfoldedChip.cpp
-    dbUnfoldedConn.cpp
-    dbUnfoldedNet.cpp
-    dbUnfoldedRegion.cpp
+    dbUnfoldedChipBumpInst.cpp
+    dbUnfoldedChipConn.cpp
+    dbUnfoldedChipInst.cpp
+    dbUnfoldedChipNet.cpp
+    dbUnfoldedChipRegionInst.cpp
     dbChipBumpInstItr.cpp
     dbChipConnItr.cpp
     dbChipInstItr.cpp
@@ -188,8 +188,8 @@ add_library(db
     dbNetTrackItr.cpp
     dbRegionGroupItr.cpp
     dbScanListScanInstItr.cpp
-    dbUnfoldedBumpItr.cpp
-    dbUnfoldedRegionItr.cpp
+    dbUnfoldedChipBumpInstItr.cpp
+    dbUnfoldedChipRegionInstItr.cpp
     # Generator Code End cpp
 )
 
