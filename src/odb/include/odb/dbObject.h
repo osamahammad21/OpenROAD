@@ -124,6 +124,7 @@ enum dbObjectType
   dbTechLayerMinCutRuleObj,
   dbTechLayerMinStepRuleObj,
   dbTechLayerSpacingEolRuleObj,
+  dbTechLayerSpacingTableDirSpanLengthRuleObj,
   dbTechLayerSpacingTablePrlRuleObj,
   dbTechLayerTwoWiresForbiddenSpcRuleObj,
   dbTechLayerVoltageSpacingObj,

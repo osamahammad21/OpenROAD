@@ -416,6 +416,15 @@
       "destroy":true
     },
     {
+      "parent":"dbTechLayer",
+      "child":"dbTechLayerSpacingTableDirSpanLengthRule",
+      "type":"1_n",
+      "tbl_name":"spacing_table_dir_span_length_rules_tbl_",
+      "schema":"kSchemaLef58SpacingTableDirSpanLength",
+      "create":true,
+      "destroy":true
+    },
+    {
       "parent": "dbDft",
       "child": "dbScanPin",
       "type": "1_n",

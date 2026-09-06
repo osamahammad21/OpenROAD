@@ -795,6 +795,15 @@ struct less<odb::dbTechLayerSpacingEolRule*>
 };
 
 template <>
+struct less<odb::dbTechLayerSpacingTableDirSpanLengthRule*>
+{
+  bool operator()(
+      const odb::dbTechLayerSpacingTableDirSpanLengthRule* lhs,
+      const odb::dbTechLayerSpacingTableDirSpanLengthRule* rhs) const
+      = delete;
+};
+
+template <>
 struct less<odb::dbTechLayerSpacingTablePrlRule*>
 {
   bool operator()(const odb::dbTechLayerSpacingTablePrlRule* lhs,

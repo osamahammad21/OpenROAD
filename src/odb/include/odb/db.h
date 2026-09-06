@@ -175,6 +175,7 @@ class dbTechLayerMaxSpacingRule;
 class dbTechLayerMinCutRule;
 class dbTechLayerMinStepRule;
 class dbTechLayerSpacingEolRule;
+class dbTechLayerSpacingTableDirSpanLengthRule;
 class dbTechLayerSpacingTablePrlRule;
 class dbTechLayerTwoWiresForbiddenSpcRule;
 class dbTechLayerVoltageSpacing;
@@ -9367,6 +9368,9 @@ class dbTechLayer : public dbObject
 
   dbSet<dbTechLayerVoltageSpacing> getTechLayerVoltageSpacings() const;
 
+  dbSet<dbTechLayerSpacingTableDirSpanLengthRule>
+  getTechLayerSpacingTableDirSpanLengthRules() const;
+
   void setRectOnly(bool rect_only);
 
   bool isRectOnly() const;
@@ -11302,6 +11306,92 @@ class dbTechLayerSpacingEolRule : public dbObject
       uint32_t dbid);
 
   // User Code End dbTechLayerSpacingEolRule
+};
+
+class dbTechLayerSpacingTableDirSpanLengthRule : public dbObject
+{
+ public:
+  struct ExactSpanLengthSpacing
+  {
+    int span_length_1 = 0;
+    int span_length_2 = 0;
+    int prl = 0;
+    std::vector<int> exact_spacings;
+  };
+
+  void setEolWidth(int eol_width);
+
+  int getEolWidth() const;
+
+  void setWrongDirection(bool wrong_direction);
+
+  bool isWrongDirection() const;
+
+  void setSameMask(bool same_mask);
+
+  bool isSameMask() const;
+
+  void setExceptEol(bool except_eol);
+
+  bool isExceptEol() const;
+
+  static dbTechLayerSpacingTableDirSpanLengthRule* create(dbTechLayer* parent);
+  static void destroy(dbTechLayerSpacingTableDirSpanLengthRule* obj);
+  // User Code Begin dbTechLayerSpacingTableDirSpanLengthRule
+
+  ///
+  /// Populate the main table. span_length_tbl holds the row keys, prl_tbl the
+  /// column keys, and spacing_tbl[row][col] the spacing for that cell. Every
+  /// row of spacing_tbl must have prl_tbl.size() entries.
+  ///
+  /// exact_spacing_tbl is parallel to span_length_tbl and carries the optional
+  /// per-row EXACTSPACING value, using -1 for rows that specified none. It may
+  /// be left empty when no row specified EXACTSPACING.
+  ///
+  void setSpacingTable(const std::vector<int>& span_length_tbl,
+                       const std::vector<int>& prl_tbl,
+                       const std::vector<std::vector<int>>& spacing_tbl,
+                       const std::vector<int>& exact_spacing_tbl);
+
+  void getSpacingTable(std::vector<int>& span_length_tbl,
+                       std::vector<int>& prl_tbl,
+                       std::vector<std::vector<int>>& spacing_tbl,
+                       std::vector<int>& exact_spacing_tbl) const;
+
+  ///
+  /// Append one EXACTSPANLENGTHSPACING block. prl is 0 when the block omitted
+  /// the PRL keyword.
+  ///
+  void addExactSpanLengthSpacing(int span_length_1,
+                                 int span_length_2,
+                                 int prl,
+                                 const std::vector<int>& exact_spacings);
+
+  void getExactSpanLengthSpacings(
+      std::vector<ExactSpanLengthSpacing>& tbl) const;
+
+  ///
+  /// Required spacing between two objects whose span lengths are span_length_1
+  /// and span_length_2 and whose parallel run length is prl. Returns 0 when
+  /// the rule imposes no constraint, which covers three cases: prl is at or
+  /// below the first column, neither span length reaches the first row, or the
+  /// matched cell of either object is zero.
+  ///
+  /// A negative prl column means the spacing is measured MAXXY style. That is
+  /// left to the caller, which can recover the matched column from
+  /// getSpacingTable().
+  ///
+  int getSpacing(int span_length_1, int span_length_2, int prl) const;
+
+  ///
+  /// Whether the row matching span_length carries an EXACTSPACING value, and
+  /// that value. A spacing exactly equal to it is not a violation.
+  ///
+  bool hasExactSpacing(int span_length) const;
+
+  int getExactSpacing(int span_length) const;
+
+  // User Code End dbTechLayerSpacingTableDirSpanLengthRule
 };
 
 class dbTechLayerSpacingTablePrlRule : public dbObject

@@ -157,6 +157,7 @@ add_library(db
     dbTechLayerMinCutRule.cpp
     dbTechLayerMinStepRule.cpp
     dbTechLayerSpacingEolRule.cpp
+    dbTechLayerSpacingTableDirSpanLengthRule.cpp
     dbTechLayerSpacingTablePrlRule.cpp
     dbTechLayerTwoWiresForbiddenSpcRule.cpp
     dbTechLayerVoltageSpacing.cpp

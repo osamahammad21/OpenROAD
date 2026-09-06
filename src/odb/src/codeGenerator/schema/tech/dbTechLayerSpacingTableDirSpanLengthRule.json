@@ -1,0 +1,99 @@
+{
+  "name": "dbTechLayerSpacingTableDirSpanLengthRule",
+  "type": "dbObject",
+  "structs": [
+    {
+      "name": "ExactSpanLengthSpacing",
+      "public": true,
+      "fields": [
+        {
+          "name": "span_length_1",
+          "type": "int",
+          "default": 0
+        },
+        {
+          "name": "span_length_2",
+          "type": "int",
+          "default": 0
+        },
+        {
+          "name": "prl",
+          "type": "int",
+          "default": 0
+        },
+        {
+          "name": "exact_spacings",
+          "type": "std::vector<int>"
+        }
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "type": "bit",
+      "name": "wrong_direction"
+    },
+    {
+      "type": "bit",
+      "name": "same_mask"
+    },
+    {
+      "type": "bit",
+      "name": "except_eol"
+    },
+    {
+      "type": "int",
+      "name": "eol_width_",
+      "default": 0
+    },
+    {
+      "type": "dbVector<int>",
+      "name": "prl_tbl_",
+      "flags": [
+        "no-set",
+        "no-get"
+      ]
+    },
+    {
+      "type": "dbVector<int>",
+      "name": "span_length_tbl_",
+      "flags": [
+        "no-set",
+        "no-get"
+      ]
+    },
+    {
+      "type": "dbVector<dbVector<int>>",
+      "name": "spacing_tbl_",
+      "flags": [
+        "no-set",
+        "no-get",
+        "no-meminfo"
+      ]
+    },
+    {
+      "type": "dbVector<int>",
+      "name": "exact_spacing_tbl_",
+      "flags": [
+        "no-set",
+        "no-get"
+      ]
+    },
+    {
+      "type": "dbVector<dbTechLayerSpacingTableDirSpanLengthRule::ExactSpanLengthSpacing>",
+      "name": "exact_span_length_spacing_tbl_",
+      "flags": [
+        "no-set",
+        "no-get",
+        "no-meminfo",
+        "no-template"
+      ]
+    }
+  ],
+  "h_includes": [
+    "dbVector.h"
+  ],
+  "cpp_includes": [
+    "dbTechLayer.h"
+  ]
+}

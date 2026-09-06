@@ -28,6 +28,7 @@
 #include "dbTechLayerMinCutRule.h"
 #include "dbTechLayerMinStepRule.h"
 #include "dbTechLayerSpacingEolRule.h"
+#include "dbTechLayerSpacingTableDirSpanLengthRule.h"
 #include "dbTechLayerSpacingTablePrlRule.h"
 #include "dbTechLayerTwoWiresForbiddenSpcRule.h"
 #include "dbTechLayerVoltageSpacing.h"
@@ -188,6 +189,10 @@ bool _dbTechLayer::operator==(const _dbTechLayer& rhs) const
     return false;
   }
   if (*voltage_spacing_rules_tbl_ != *rhs.voltage_spacing_rules_tbl_) {
+    return false;
+  }
+  if (*spacing_table_dir_span_length_rules_tbl_
+      != *rhs.spacing_table_dir_span_length_rules_tbl_) {
     return false;
   }
 
@@ -497,6 +502,12 @@ _dbTechLayer::_dbTechLayer(_dbDatabase* db)
       this,
       (GetObjTbl_t) &_dbTechLayer::getObjectTable,
       dbTechLayerVoltageSpacingObj);
+  spacing_table_dir_span_length_rules_tbl_
+      = new dbTable<_dbTechLayerSpacingTableDirSpanLengthRule>(
+          db,
+          this,
+          (GetObjTbl_t) &_dbTechLayer::getObjectTable,
+          dbTechLayerSpacingTableDirSpanLengthRuleObj);
   // User Code Begin Constructor
   flags_.type = dbTechLayerType::ROUTING;
   flags_.direction = dbTechLayerDir::NONE;
@@ -603,6 +614,9 @@ dbIStream& operator>>(dbIStream& stream, _dbTechLayer& obj)
   if (obj.getDatabase()->isSchema(kSchemaVoltageSpacingTables)) {
     stream >> *obj.voltage_spacing_rules_tbl_;
   }
+  if (obj.getDatabase()->isSchema(kSchemaLef58SpacingTableDirSpanLength)) {
+    stream >> *obj.spacing_table_dir_span_length_rules_tbl_;
+  }
   // User Code Begin >>
   if (obj.getDatabase()->isSchema(kSchemaLayerAdjustment)) {
     stream >> obj.layer_adjustment_;
@@ -701,6 +715,7 @@ dbOStream& operator<<(dbOStream& stream, const _dbTechLayer& obj)
   stream << *obj.wrongdir_spacing_rules_tbl_;
   stream << *obj.two_wires_forbidden_spc_rules_tbl_;
   stream << *obj.voltage_spacing_rules_tbl_;
+  stream << *obj.spacing_table_dir_span_length_rules_tbl_;
   // User Code Begin <<
   stream << obj.layer_adjustment_;
   stream << obj.pitch_x_;
@@ -792,6 +807,8 @@ dbObjectTable* _dbTechLayer::getObjectTable(dbObjectType type)
       return two_wires_forbidden_spc_rules_tbl_;
     case dbTechLayerVoltageSpacingObj:
       return voltage_spacing_rules_tbl_;
+    case dbTechLayerSpacingTableDirSpanLengthRuleObj:
+      return spacing_table_dir_span_length_rules_tbl_;
       // User Code Begin getObjectTable
     case dbTechLayerSpacingRuleObj:
       return spacing_rules_tbl_;
@@ -853,6 +870,8 @@ void _dbTechLayer::collectMemInfo(MemInfo& info)
       info.children["two_wires_forbidden_spc_rules_tbl_"]);
   voltage_spacing_rules_tbl_->collectMemInfo(
       info.children["voltage_spacing_rules_tbl_"]);
+  spacing_table_dir_span_length_rules_tbl_->collectMemInfo(
+      info.children["spacing_table_dir_span_length_rules_tbl_"]);
 
   // User Code Begin collectMemInfo
   info.children["name"].add(name_);
@@ -893,6 +912,7 @@ _dbTechLayer::~_dbTechLayer()
   delete wrongdir_spacing_rules_tbl_;
   delete two_wires_forbidden_spc_rules_tbl_;
   delete voltage_spacing_rules_tbl_;
+  delete spacing_table_dir_span_length_rules_tbl_;
   // User Code Begin Destructor
   if (name_) {
     free((void*) name_);
@@ -1150,6 +1170,14 @@ dbSet<dbTechLayerVoltageSpacing> dbTechLayer::getTechLayerVoltageSpacings()
 {
   _dbTechLayer* obj = (_dbTechLayer*) this;
   return dbSet<dbTechLayerVoltageSpacing>(obj, obj->voltage_spacing_rules_tbl_);
+}
+
+dbSet<dbTechLayerSpacingTableDirSpanLengthRule>
+dbTechLayer::getTechLayerSpacingTableDirSpanLengthRules() const
+{
+  _dbTechLayer* obj = (_dbTechLayer*) this;
+  return dbSet<dbTechLayerSpacingTableDirSpanLengthRule>(
+      obj, obj->spacing_table_dir_span_length_rules_tbl_);
 }
 
 void dbTechLayer::setRectOnly(bool rect_only)
